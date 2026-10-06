@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import Link from "next/link"
-import { ArrowLeft, Save, Plus, Trash2, Users2, Shirt, User, DollarSign, Layers } from "lucide-react"
+import { ArrowLeft, Save, Plus, Trash2, Users2, Shirt, User, DollarSign, Layers, Sparkles } from "lucide-react"
 
 interface RosterItem {
   player_name: string
@@ -58,6 +58,9 @@ export default function NewOrderPage() {
   const [makloonVendorName, setMakloonVendorName] = useState("")
   const [partnerList, setPartnerList] = useState<PartnerItem[]>([])
 
+  // Bulk Generator State
+  const [bulkQtyInput, setBulkQtyInput] = useState<number>(12)
+
   const [roster, setRoster] = useState<RosterItem[]>([
     { player_name: "", back_number: "", size: "L", sleeve_type: "SHORT", notes: "" }
   ])
@@ -74,6 +77,21 @@ export default function NewOrderPage() {
     }
     fetchPartners()
   }, [])
+
+  // Fungsi Menambah Baris Sekaligus Sesuai Jumlah Pcs
+  const handleBulkGenerate = () => {
+    const qty = Number(bulkQtyInput)
+    if (isNaN(qty) || qty <= 0) return
+
+    const newRows: RosterItem[] = Array.from({ length: qty }, () => ({
+      player_name: "",
+      back_number: "",
+      size: "L",
+      sleeve_type: "SHORT",
+      notes: ""
+    }))
+    setRoster(newRows)
+  }
 
   const handleAddRow = () => {
     setRoster([
@@ -302,10 +320,10 @@ export default function NewOrderPage() {
           </div>
         </div>
 
-        {/* JALUR PENGERJAAN JAHIT (INTERNAL VS DROPDOWN MAKLOON) */}
+        {/* JALUR PENGERJAAN JAHIT (BERSIH DARI TEKS TERCETAK DI SPK) */}
         <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
           <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
-            <Users2 className="h-3.5 w-3.5 text-zinc-600" /> Jalur Pengerjaan Jahit (Tercetak di SPK)
+            <Users2 className="h-3.5 w-3.5 text-zinc-600" /> Jalur Pengerjaan Jahit
           </span>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
@@ -392,19 +410,44 @@ export default function NewOrderPage() {
           />
         </div>
 
-        {/* TABEL ROSTER AWAL */}
+        {/* TABEL ROSTER AWAL + BULK GENERATOR INPUT */}
         <div className="border border-zinc-200 bg-white rounded overflow-hidden shadow-2xs">
-          <div className="p-3 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between">
+          <div className="p-3 border-b border-zinc-200 bg-zinc-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <span className="text-xs font-semibold text-zinc-800 flex items-center gap-1.5">
               <Layers className="h-3.5 w-3.5 text-zinc-600" /> Roster Pemain Awal ({roster.length} Pcs)
             </span>
-            <button
-              type="button"
-              onClick={handleAddRow}
-              className="inline-flex items-center gap-1 bg-white border border-zinc-300 hover:bg-zinc-100 text-zinc-800 text-[11px] font-medium px-2.5 py-1 rounded transition-colors"
-            >
-              <Plus className="h-3 w-3" /> Tambah Baris
-            </button>
+
+            {/* GENERATOR CEPAT JUMLAH PCS */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center border border-zinc-300 rounded bg-white overflow-hidden shadow-2xs">
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={bulkQtyInput}
+                  onChange={(e) => setBulkQtyInput(Number(e.target.value))}
+                  placeholder="Jml"
+                  className="w-14 px-2 py-1 text-xs font-mono text-center focus:outline-none"
+                  title="Ketik jumlah pcs yang diinginkan"
+                />
+                <button
+                  type="button"
+                  onClick={handleBulkGenerate}
+                  className="px-2.5 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-[11px] font-semibold border-l border-zinc-200 transition-colors flex items-center gap-1"
+                >
+                  <Sparkles className="h-3 w-3 text-amber-600" />
+                  <span>Generate Baris</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddRow}
+                className="inline-flex items-center gap-1 bg-white border border-zinc-300 hover:bg-zinc-100 text-zinc-800 text-[11px] font-medium px-2.5 py-1 rounded transition-colors shadow-2xs"
+              >
+                <Plus className="h-3 w-3" /> Tambah 1
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">

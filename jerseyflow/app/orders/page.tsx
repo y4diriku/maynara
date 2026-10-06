@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import Link from "next/link"
-import { Plus, Search, Eye, Printer, ChevronRight } from "lucide-react"
+import { Search, Eye, Printer } from "lucide-react"
 
 function formatDateID(dateStr?: string | null): string {
   if (!dateStr) return "-"
@@ -42,18 +42,10 @@ export default function OrdersListPage() {
 
   return (
     <div className="space-y-4 max-w-6xl mx-auto pb-12">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200 pb-3">
-        <div>
-          <h1 className="text-base font-bold text-zinc-900 leading-tight">Daftar Semua Pesanan</h1>
-          <p className="text-xs text-zinc-600">Arsip seluruh pesanan, rincian biaya, dan pencetakan dokumen.</p>
-        </div>
-        <Link
-          href="/orders/new"
-          className="inline-flex items-center gap-1.5 rounded bg-zinc-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-zinc-800 transition-colors shadow-2xs self-start sm:self-auto"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          <span>Buat Pesanan Baru</span>
-        </Link>
+      {/* Header Halaman Bersih Tanpa Tombol Redundan */}
+      <div className="border-b border-zinc-200 pb-3">
+        <h1 className="text-base font-bold text-zinc-900 leading-tight">Daftar Semua Pesanan</h1>
+        <p className="text-xs text-zinc-600">Arsip seluruh pesanan, rincian biaya, dan pencetakan dokumen.</p>
       </div>
 
       <div className="flex items-center gap-2 border border-zinc-200 bg-white p-2.5 rounded shadow-2xs">

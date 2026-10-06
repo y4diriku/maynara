@@ -20,7 +20,8 @@ import {
   FileText, 
   X, 
   PieChart, 
-  Users2 
+  Users2,
+  Sparkles
 } from "lucide-react"
 
 interface RosterItem {
@@ -82,6 +83,9 @@ export default function OrderDetailPage() {
   const [partnerList, setPartnerList] = useState<PartnerItem[]>([])
   const [loadingPartners, setLoadingPartners] = useState(false)
 
+  // Bulk Generator State
+  const [bulkAddCount, setBulkAddCount] = useState<number>(5)
+
   const [mockupUrl1, setMockupUrl1] = useState<string | null>(null)
   const [mockupUrl2, setMockupUrl2] = useState<string | null>(null)
   const [mockupUrl3, setMockupUrl3] = useState<string | null>(null)
@@ -94,7 +98,6 @@ export default function OrderDetailPage() {
       if (!orderId) return
       setLoading(true)
 
-      // 1. Ambil data order
       const { data: oData, error: oErr } = await supabase
         .from("orders")
         .select("*")
@@ -124,7 +127,6 @@ export default function OrderDetailPage() {
       setMockupUrl2(oData.mockup_url_2 || null)
       setMockupUrl3(oData.mockup_url_3 || null)
 
-      // 2. Ambil daftar partner makloon (toleransi fleksibel terhadap nama kolom)
       setLoadingPartners(true)
       const { data: pData } = await supabase
         .from("makloon_partners")
@@ -140,7 +142,6 @@ export default function OrderDetailPage() {
       }
       setLoadingPartners(false)
 
-      // 3. Ambil data roster
       const { data: rData } = await supabase
         .from("order_roster_items")
         .select("*")
@@ -171,6 +172,21 @@ export default function OrderDetailPage() {
     })
     return Object.entries(summary).sort((a, b) => b[1] - a[1])
   }, [roster])
+
+  // Tambah Beberapa Baris Sekaligus
+  const handleBulkAdd = () => {
+    const count = Number(bulkAddCount)
+    if (isNaN(count) || count <= 0) return
+
+    const newRows: RosterItem[] = Array.from({ length: count }, () => ({
+      player_name: "",
+      back_number: "",
+      size: "L",
+      sleeve_type: "SHORT",
+      notes: ""
+    }))
+    setRoster([...roster, ...newRows])
+  }
 
   const handleUploadMockup = async (e: React.ChangeEvent<HTMLInputElement>, slot: 1 | 2 | 3) => {
     const file = e.target.files?.[0]
@@ -557,10 +573,10 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* PILIHAN PELAKSANA JALUR JAHIT (INTERNAL VS MAKLOON DENGAN DROPDOWN MITRA) */}
+        {/* JALUR PENGERJAAN JAHIT (BERSIH DARI TEKS TERCETAK DI SPK) */}
         <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
           <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
-            <Users2 className="h-3.5 w-3.5 text-zinc-600" /> Jalur Pengerjaan Jahit (Tercetak di SPK)
+            <Users2 className="h-3.5 w-3.5 text-zinc-600" /> Jalur Pengerjaan Jahit
           </span>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
@@ -630,9 +646,6 @@ export default function OrderDetailPage() {
                     </span>
                   </div>
                 )}
-                <span className="text-[10px] text-zinc-500 block">
-                  Nama mitra akan tercantum pada kop dan kotak paraf SPK fisik.
-                </span>
               </div>
             )}
           </div>
@@ -652,7 +665,7 @@ export default function OrderDetailPage() {
           />
         </div>
 
-        {/* TABEL ROSTER PEMAIN */}
+        {/* TABEL ROSTER PEMAIN + BULK GENERATOR */}
         <div className="border border-zinc-200 bg-white rounded overflow-hidden shadow-2xs">
           <div className="p-3 border-b border-zinc-200 bg-zinc-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-1">
@@ -673,13 +686,37 @@ export default function OrderDetailPage() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleAddRow}
-              className="inline-flex items-center gap-1 bg-white border border-zinc-300 hover:bg-zinc-100 text-zinc-800 text-[11px] font-medium px-2.5 py-1 rounded transition-colors self-start sm:self-auto"
-            >
-              <Plus className="h-3 w-3" /> Tambah Baris
-            </button>
+            {/* GENERATOR CEPAT JUMLAH PCS */}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <div className="flex items-center border border-zinc-300 rounded bg-white overflow-hidden shadow-2xs">
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={bulkAddCount}
+                  onChange={(e) => setBulkAddCount(Number(e.target.value))}
+                  placeholder="Jml"
+                  className="w-14 px-2 py-1 text-xs font-mono text-center focus:outline-none"
+                  title="Ketik jumlah baris yang ingin ditambahkan"
+                />
+                <button
+                  type="button"
+                  onClick={handleBulkAdd}
+                  className="px-2.5 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-[11px] font-semibold border-l border-zinc-200 transition-colors flex items-center gap-1"
+                >
+                  <Sparkles className="h-3 w-3 text-amber-600" />
+                  <span>+ Tambah Sekaligus</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddRow}
+                className="inline-flex items-center gap-1 bg-white border border-zinc-300 hover:bg-zinc-100 text-zinc-800 text-[11px] font-medium px-2.5 py-1 rounded transition-colors shadow-2xs"
+              >
+                <Plus className="h-3 w-3" /> Tambah 1
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -698,9 +735,7 @@ export default function OrderDetailPage() {
               <tbody className="divide-y divide-zinc-200">
                 {roster.map((row, index) => (
                   <tr key={index} className="hover:bg-zinc-50/50">
-                    <td className="py-1.5 px-3 text-center text-zinc-600 font-mono text-[11px]">
-                      {index + 1}
-                    </td>
+                    <td className="py-1.5 px-3 text-center text-zinc-600 font-mono text-[11px]">{index + 1}</td>
                     <td className="py-1.5 px-3">
                       <input
                         type="text"
