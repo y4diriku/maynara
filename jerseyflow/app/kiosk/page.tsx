@@ -40,42 +40,68 @@ interface AuditLog {
   operator_role?: string | null
 }
 
-const STAGES_CONFIG: { [key: string]: { label: string; next: string; nextLabel: string; allowedRoles: string[] } } = {
+const STAGES_CONFIG: { 
+  [key: string]: { 
+    label: string
+    next: string
+    nextLabel: string
+    allowedRoles: string[]
+    handoverItem: string
+    logMessage: (isMakloon?: boolean, vendorName?: string | null) => string
+  } 
+} = {
   DESIGN_QUEUE: {
     label: "Antrean Desain",
     next: "PRINTING",
     nextLabel: "Cetak & Sublim",
-    allowedRoles: ["OWNER", "ADMIN", "DESIGNER", "OPERATOR_PRINT"]
+    // Hanya Designer, Admin, atau Owner yang boleh menyelesaikan tahap desain
+    allowedRoles: ["OWNER", "ADMIN", "DESIGNER"],
+    handoverItem: "file cetak & lembar SPK",
+    logMessage: () => "File desain & layout pola selesai disiapkan. SPK diteruskan ke pos Cetak & Sublim."
   },
   PRINTING: {
     label: "Cetak & Sublim",
     next: "CUTTING",
     nextLabel: "Cutting Pola",
-    allowedRoles: ["OWNER", "ADMIN", "OPERATOR_PRINT"]
+    allowedRoles: ["OWNER", "ADMIN", "OPERATOR_PRINT"],
+    handoverItem: "kain hasil press sublim & lembar SPK",
+    logMessage: () => "Proses cetak kertas sublim & press transfer kain selesai. Gulungan kain & SPK diserahkan ke pos Cutting Pola."
   },
   CUTTING: {
     label: "Cutting Pola",
     next: "SEWING",
     nextLabel: "Lini Jahit",
-    allowedRoles: ["OWNER", "ADMIN", "OPERATOR_CUTTING"]
+    allowedRoles: ["OWNER", "ADMIN", "OPERATOR_CUTTING"],
+    handoverItem: "potongan kain pola & lembar SPK",
+    logMessage: (isMakloon, vendor) => isMakloon
+      ? `Potongan pola selesai dipotong. Kain & SPK diserahkan ke Mitra Makloon (${vendor || "Vendor Luar"}).`
+      : "Potongan pola jersey selesai dipotong per ukuran roster dan diserahkan ke Lini Jahit."
   },
   SEWING: {
     label: "Lini Jahit",
     next: "QC_PACKING",
     nextLabel: "QC & Packing",
-    allowedRoles: ["OWNER", "ADMIN", "SEWING_SUPERVISOR", "OPERATOR_SEWING"]
+    allowedRoles: ["OWNER", "ADMIN", "SEWING_SUPERVISOR", "OPERATOR_SEWING"],
+    handoverItem: "jersey jadi & lembar SPK",
+    logMessage: (isMakloon, vendor) => isMakloon
+      ? `Jahitan jersey selesai diterima kembali dari mitra makloon (${vendor || "Vendor Luar"}) dan diserahkan ke QC & Packing.`
+      : "Proses jahit jersey selesai dirakit dan diserahkan ke QC & Packing."
   },
   QC_PACKING: {
     label: "QC & Packing",
     next: "READY_FOR_DELIVERY",
     nextLabel: "Siap Diambil",
-    allowedRoles: ["OWNER", "ADMIN", "QC", "OPERATOR_PACKING"]
+    allowedRoles: ["OWNER", "ADMIN", "QC", "OPERATOR_PACKING"],
+    handoverItem: "paket jersey rapi & nota",
+    logMessage: () => "Pemeriksaan jahitan (QC), buang benang, dan packing plastik selesai. Pesanan siap diambil/dikirim."
   },
   READY_FOR_DELIVERY: {
     label: "Siap Diambil",
     next: "COMPLETED",
     nextLabel: "Pesanan Selesai",
-    allowedRoles: ["OWNER", "ADMIN"]
+    allowedRoles: ["OWNER", "ADMIN"],
+    handoverItem: "arsip nota selesai",
+    logMessage: () => "Pesanan telah diserahkan ke pelanggan / kurir pengiriman. Pengerjaan selesai penuh."
   }
 }
 
@@ -278,7 +304,9 @@ function KioskContent() {
 
       if (updateErr) throw updateErr
 
-      const auditNote = `Tugas pos [${finishedLabel}] telah diselesaikan. Kain & SPK diserahkan ke pos [${nextLabel}].`
+      // Buat narasi log kontekstual sesuai divisi dan jalur (internal / makloon)
+      const auditNote = currentStageConfig.logMessage(currentOrder.is_makloon, currentOrder.makloon_vendor_name)
+
       const { error: logErr } = await supabase.from("production_logs").insert({
         order_id: currentOrder.id,
         stage: nextStageKey,
@@ -415,10 +443,10 @@ function KioskContent() {
               Instruksi Serah Terima
             </span>
             <p className="font-semibold text-zinc-900">
-              Silakan bawa fisik lembar SPK & kain ke pos selanjutnya:
+              Silakan serahkan berkas & hasil kerja ke pos selanjutnya:
             </p>
             <div className="inline-block bg-zinc-900 text-white font-black px-3.5 py-1.5 rounded text-xs font-mono">
-              &rarr; {completedStageInfo.nextStage}
+              &rarr; Pos {completedStageInfo.nextStage}
             </div>
           </div>
 
