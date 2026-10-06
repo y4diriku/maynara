@@ -38,6 +38,8 @@ interface AuditLog {
   stage: string
   notes: string
   created_at: string
+  operator_name?: string | null
+  operator_role?: string | null
   profiles?: {
     full_name: string | null
     role: string | null
@@ -180,24 +182,15 @@ function KioskContent() {
       } else {
         setCurrentOrder(oData)
 
-        // Ambil Audit Trail Log
-        const { data: lData } = await supabase
+        // Ambil Audit Trail Log secara langsung dan tahan banting
+        const { data: lData, error: lErr } = await supabase
           .from("production_logs")
-          .select(`
-            id,
-            stage,
-            notes,
-            created_at,
-            profiles (
-              full_name,
-              role
-            )
-          `)
+          .select("*")
           .eq("order_id", oData.id)
           .order("created_at", { ascending: false })
 
-        if (lData) {
-          setAuditLogs(lData as any)
+        if (!lErr && lData) {
+          setAuditLogs(lData)
         }
       }
     } catch (err: any) {
@@ -284,14 +277,20 @@ function KioskContent() {
 
       if (updateErr) throw updateErr
 
-      // 2. Simpan Rekam Jejak Audit Trail (Production Logs)
-      const auditNote = `Tugas pos [${finishedLabel}] diselesaikan oleh ${operatorInfo.name} (${operatorInfo.role}). Diteruskan ke [${nextLabel}].`
-      await supabase.from("production_logs").insert({
+      // 2. Simpan Rekam Jejak Audit Trail Lengkap
+      const auditNote = `Tugas pos [${finishedLabel}] diselesaikan dan diserahkan ke [${nextLabel}].`
+      const { error: logErr } = await supabase.from("production_logs").insert({
         order_id: currentOrder.id,
         stage: nextStageKey,
         notes: auditNote,
+        operator_name: operatorInfo.name,
+        operator_role: operatorInfo.role,
         operator_id: session?.user?.id || null
       })
+
+      if (logErr) {
+        console.warn("Gagal simpan log audit:", logErr)
+      }
 
       // 3. Tampilkan Layar Sukses / Handover
       setCompletedStageInfo({
@@ -536,25 +535,30 @@ function KioskContent() {
               </div>
             ) : (
               <div className="space-y-2.5">
-                {auditLogs.map((log) => (
-                  <div key={log.id} className="border-l-2 border-zinc-900 pl-3 py-0.5 space-y-0.5 text-xs">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <strong className="text-zinc-900 font-bold">
-                        {log.profiles?.full_name || "Staf Workshop"} 
-                        <span className="text-zinc-400 font-normal font-mono ml-1">
-                          ({log.profiles?.role || "PIC"})
+                {auditLogs.map((log) => {
+                  const picName = log.operator_name || log.profiles?.full_name || "Staf Workshop"
+                  const picRole = log.operator_role || log.profiles?.role || "OPERATOR"
+
+                  return (
+                    <div key={log.id} className="border-l-2 border-zinc-900 pl-3 py-0.5 space-y-0.5 text-xs">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <strong className="text-zinc-900 font-bold">
+                          {picName}
+                          <span className="text-zinc-500 font-mono font-medium ml-1.5 px-1 py-0.2 bg-zinc-100 rounded text-[10px] border border-zinc-200">
+                            {picRole}
+                          </span>
+                        </strong>
+                        <span className="font-mono text-[10px] text-zinc-500 flex items-center gap-1">
+                          <Clock className="h-3 w-3 text-zinc-400" />
+                          {formatDateID(log.created_at)} &bull; {formatTimeID(log.created_at)}
                         </span>
-                      </strong>
-                      <span className="font-mono text-[10px] text-zinc-500 flex items-center gap-1">
-                        <Clock className="h-3 w-3 text-zinc-400" />
-                        {formatDateID(log.created_at)} &bull; {formatTimeID(log.created_at)}
-                      </span>
+                      </div>
+                      <p className="text-[11px] text-zinc-600 leading-snug">
+                        {log.notes}
+                      </p>
                     </div>
-                    <p className="text-[11px] text-zinc-600 leading-snug">
-                      {log.notes}
-                    </p>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
