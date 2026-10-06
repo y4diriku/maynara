@@ -3,26 +3,20 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
-import { 
-  ArrowLeft, 
-  Plus, 
-  Trash2, 
-  Save, 
-  User, 
-  Shirt, 
-  DollarSign, 
-  Layers,
-  Sparkles
-} from "lucide-react"
 import Link from "next/link"
+import { ArrowLeft, Save, Plus, Trash2, Users2, Shirt, User, DollarSign, Layers } from "lucide-react"
 
 interface RosterItem {
-  id: string
   player_name: string
   back_number: string
   size: string
   sleeve_type: "SHORT" | "LONG"
   notes: string
+}
+
+interface PartnerItem {
+  id: string
+  name: string
 }
 
 const FABRIC_OPTIONS = [
@@ -46,225 +40,173 @@ const SIZE_OPTIONS = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "Anak (S-X
 
 export default function NewOrderPage() {
   const router = useRouter()
-  const [checkingRole, setCheckingRole] = useState(true)
-  const [loading, setLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState("")
 
   const [customerName, setCustomerName] = useState("")
   const [customerPhone, setCustomerPhone] = useState("")
-  const [teamName, setTeamName] = useState("")
   const [fabricType, setFabricType] = useState(FABRIC_OPTIONS[0])
   const [collarType, setCollarType] = useState(COLLAR_OPTIONS[0])
   const [deadlineDate, setDeadlineDate] = useState("")
-  const [priority, setPriority] = useState<"NORMAL" | "HIGH" | "URGENT">("NORMAL")
-  const [pricePerPcs, setPricePerPcs] = useState(120000)
-  const [downPayment, setDownPayment] = useState(0)
+  const [priority, setPriority] = useState("NORMAL")
+  const [totalPrice, setTotalPrice] = useState<number>(0)
+  const [downPayment, setDownPayment] = useState<number>(0)
+  const [productionNotes, setProductionNotes] = useState("")
 
-  const [targetBatchQty, setTargetBatchQty] = useState(12)
+  // Pilihan Makloon & Partner
+  const [isMakloon, setIsMakloon] = useState(false)
+  const [makloonVendorName, setMakloonVendorName] = useState("")
+  const [partnerList, setPartnerList] = useState<PartnerItem[]>([])
+
   const [roster, setRoster] = useState<RosterItem[]>([
-    { id: "1", player_name: "", back_number: "", size: "L", sleeve_type: "SHORT", notes: "" }
+    { player_name: "", back_number: "", size: "L", sleeve_type: "SHORT", notes: "" }
   ])
 
   useEffect(() => {
-    async function checkPermission() {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", session.user.id)
-          .single()
-        
-        const role = (data?.role || "ADMIN").toUpperCase()
-        if (role === "OPERATOR" || role === "OPERATOR_PRINT" || role === "SEWING_SUPERVISOR" || role === "QC") {
-          router.replace("/kiosk")
-          return
-        }
+    async function fetchPartners() {
+      const { data } = await supabase.from("makloon_partners").select("*").order("created_at", { ascending: false })
+      if (data && data.length > 0) {
+        setPartnerList(data.map((p: any) => ({
+          id: p.id,
+          name: p.name || p.partner_name || p.vendor_name || "Tanpa Nama"
+        })))
       }
-      setCheckingRole(false)
     }
-    checkPermission()
-  }, [router])
-
-  const totalQty = roster.length
-  const totalPrice = totalQty * pricePerPcs
-
-  const handleGenerateBatchRows = () => {
-    const count = Number(targetBatchQty)
-    if (isNaN(count) || count <= 0) return
-
-    const newRows: RosterItem[] = []
-    for (let i = 1; i <= count; i++) {
-      newRows.push({
-        id: String(i),
-        player_name: "",
-        back_number: "",
-        size: "L",
-        sleeve_type: "SHORT",
-        notes: "",
-      })
-    }
-    setRoster(newRows)
-  }
+    fetchPartners()
+  }, [])
 
   const handleAddRow = () => {
-    const nextId = (roster.length + 1).toString()
-    setRoster([...roster, {
-      id: nextId,
-      player_name: "",
-      back_number: "",
-      size: "L",
-      sleeve_type: "SHORT",
-      notes: ""
-    }])
+    setRoster([
+      ...roster,
+      { player_name: "", back_number: "", size: "L", sleeve_type: "SHORT", notes: "" }
+    ])
   }
 
-  const handleRemoveRow = (index: number) => {
+  const handleRemoveRow = (idx: number) => {
     if (roster.length <= 1) return
-    setRoster(roster.filter((_, idx) => idx !== index))
+    setRoster(roster.filter((_, i) => i !== idx))
   }
 
-  const handleRosterChange = (index: number, field: keyof RosterItem, value: string) => {
+  const handleRosterChange = (idx: number, field: keyof RosterItem, val: string) => {
     const updated = [...roster]
-    updated[index] = { ...updated[index], [field]: value }
+    updated[idx] = { ...updated[idx], [field]: val }
     setRoster(updated)
-  }
-
-  const generateOrderNumber = () => {
-    const now = new Date()
-    const yy = String(now.getFullYear()).slice(-2)
-    const mm = String(now.getMonth() + 1).padStart(2, "0")
-    const dd = String(now.getDate()).padStart(2, "0")
-    const randomCode = Math.floor(1000 + Math.random() * 9000)
-    return "JR-" + yy + mm + dd + "-" + randomCode
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setSubmitting(true)
     setErrorMsg("")
 
-    if (!customerName || !customerPhone || !deadlineDate) {
-      setErrorMsg("Mohon lengkapi nama pemesan, no WhatsApp, dan tanggal deadline.")
-      return
-    }
-
-    setLoading(true)
-    const orderNumber = generateOrderNumber()
-
     try {
-      const fullCustomer = teamName ? customerName + " (" + teamName + ")" : customerName
+      const now = new Date()
+      const datePart = now.toISOString().slice(2, 10).replace(/-/g, "")
+      const randomPart = Math.floor(1000 + Math.random() * 9000)
+      const orderNumber = `JR-${datePart}-${randomPart}`
 
-      const { data: orderData, error: orderErr } = await supabase
+      const totalQty = roster.length
+      const isPaid = downPayment >= totalPrice
+
+      const { data: orderData, error: orderError } = await supabase
         .from("orders")
         .insert({
           order_number: orderNumber,
-          customer_name: fullCustomer,
+          customer_name: customerName,
           customer_phone: customerPhone,
-          total_qty: totalQty,
           fabric_type: fabricType,
           collar_type: collarType,
+          deadline_date: deadlineDate,
+          priority: priority,
+          total_qty: totalQty,
           total_price: totalPrice,
           down_payment: downPayment,
-          is_paid_off: downPayment >= totalPrice,
+          is_paid_off: isPaid,
           current_status: "DESIGN_QUEUE",
-          priority: priority,
-          deadline_date: deadlineDate,
+          production_notes: productionNotes,
+          is_makloon: isMakloon,
+          makloon_vendor_name: isMakloon ? makloonVendorName.trim() : null
         })
         .select()
         .single()
 
-      if (orderErr) throw new Error("Gagal menyimpan order: " + orderErr.message)
+      if (orderError) throw orderError
 
-      const rosterRows = roster.map((item) => ({
+      const rosterPayload = roster.map((r) => ({
         order_id: orderData.id,
-        player_name: item.player_name.trim() || "-",
-        back_number: item.back_number.trim() || "-",
-        size: item.size,
-        sleeve_type: item.sleeve_type,
-        notes: item.notes.trim() || null,
+        player_name: r.player_name.trim() || "-",
+        back_number: r.back_number.trim() || "-",
+        size: r.size,
+        sleeve_type: r.sleeve_type,
+        notes: r.notes.trim() || null,
       }))
 
-      const { error: rosterErr } = await supabase.from("order_roster_items").insert(rosterRows)
-      if (rosterErr) throw new Error("Gagal menyimpan item roster: " + rosterErr.message)
+      const { error: rosterError } = await supabase
+        .from("order_roster_items")
+        .insert(rosterPayload)
+
+      if (rosterError) throw rosterError
 
       await supabase.from("production_logs").insert({
         order_id: orderData.id,
         stage: "DESIGN_QUEUE",
-        notes: "Order baru dibuat. Menunggu proses approval mockup desain."
+        notes: "Pesanan baru dibuat dan masuk antrean desain."
       })
 
-      // Langsung arahkan ke halaman detail order untuk upload mockup / cetak
       router.push(`/orders/${orderData.id}`)
-      router.refresh()
-
     } catch (err: any) {
-      setErrorMsg(err.message || "Terjadi kesalahan koneksi.")
-    } finally {
-      setLoading(false)
+      setErrorMsg(err.message || "Gagal membuat pesanan")
+      setSubmitting(false)
     }
   }
 
-  if (checkingRole) return null
-
   return (
-    <div className="max-w-5xl mx-auto space-y-4 pb-12">
-      <div className="flex items-center justify-between border-b border-zinc-200 pb-3">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/"
-            className="p-1.5 border border-zinc-200 rounded hover:bg-zinc-100 text-zinc-600 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-          <div>
-            <h1 className="text-base font-bold text-zinc-900 leading-tight">Buat Pesanan Baru</h1>
-            <p className="text-xs text-zinc-600">Input spesifikasi jersey, nominal pembayaran, dan generate baris roster otomatis.</p>
-          </div>
+    <div className="max-w-4xl mx-auto space-y-4 pb-12">
+      <div className="flex items-center gap-3 border-b border-zinc-200 pb-3">
+        <Link
+          href="/orders"
+          className="p-1.5 border border-zinc-200 rounded hover:bg-zinc-100 text-zinc-600 transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Link>
+        <div>
+          <h1 className="text-base font-bold text-zinc-900 leading-tight">Buat Pesanan Baru</h1>
+          <p className="text-xs text-zinc-600">Input data pemesan, spesifikasi jersey, jalur pengerjaan, dan roster awal.</p>
         </div>
       </div>
 
       {errorMsg && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded text-xs text-red-700 font-medium">
+        <div className="p-3 bg-red-50 text-red-700 text-xs rounded border border-red-200">
           {errorMsg}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* PARAMETER UTAMA */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
-            <span className="text-[11px] font-semibold text-zinc-600 uppercase tracking-tight flex items-center gap-1.5">
+            <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5">
               <User className="h-3.5 w-3.5 text-zinc-500" /> Informasi Pemesan
             </span>
             <div className="space-y-2 text-xs">
               <div>
-                <label className="block text-zinc-600 font-medium mb-1">Nama Pemesan / Kontak</label>
+                <label className="block text-zinc-600 font-medium mb-1">Nama Pemesan / Tim</label>
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: Budi Santoso"
+                  placeholder="Contoh: Garuda FC Bandung"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   className="w-full px-2.5 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none"
                 />
               </div>
               <div>
-                <label className="block text-zinc-600 font-medium mb-1">WhatsApp Pemesan</label>
+                <label className="block text-zinc-600 font-medium mb-1">Nomor WhatsApp</label>
                 <input
                   type="text"
                   required
-                  placeholder="08xxxxxxxxxx"
+                  placeholder="08123456789"
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
-                  className="w-full px-2.5 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-zinc-600 font-medium mb-1">Nama Tim / Klub</label>
-                <input
-                  type="text"
-                  placeholder="Contoh: Garuda FC Bandung"
-                  value={teamName}
-                  onChange={(e) => setTeamName(e.target.value)}
                   className="w-full px-2.5 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none"
                 />
               </div>
@@ -272,12 +214,12 @@ export default function NewOrderPage() {
           </div>
 
           <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
-            <span className="text-[11px] font-semibold text-zinc-600 uppercase tracking-tight flex items-center gap-1.5">
-              <Shirt className="h-3.5 w-3.5 text-zinc-500" /> Spesifikasi Bahan
+            <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5">
+              <Shirt className="h-3.5 w-3.5 text-zinc-500" /> Bahan & Model
             </span>
             <div className="space-y-2 text-xs">
               <div>
-                <label className="block text-zinc-600 font-medium mb-1">Jenis Bahan Kain</label>
+                <label className="block text-zinc-600 font-medium mb-1">Bahan Kain</label>
                 <select
                   value={fabricType}
                   onChange={(e) => setFabricType(e.target.value)}
@@ -301,10 +243,10 @@ export default function NewOrderPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-zinc-600 font-medium mb-1">Tingkat Urgensi / Prioritas</label>
+                <label className="block text-zinc-600 font-medium mb-1">Prioritas</label>
                 <select
                   value={priority}
-                  onChange={(e) => setPriority(e.target.value as any)}
+                  onChange={(e) => setPriority(e.target.value)}
                   className="w-full px-2 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white"
                 >
                   <option value="NORMAL">Normal</option>
@@ -316,12 +258,12 @@ export default function NewOrderPage() {
           </div>
 
           <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
-            <span className="text-[11px] font-semibold text-zinc-600 uppercase tracking-tight flex items-center gap-1.5">
-              <DollarSign className="h-3.5 w-3.5 text-zinc-500" /> Deadline & Keuangan
+            <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5">
+              <DollarSign className="h-3.5 w-3.5 text-zinc-500" /> Deadline & Biaya
             </span>
             <div className="space-y-2 text-xs">
               <div>
-                <label className="block text-zinc-600 font-medium mb-1">Target Tanggal Selesai (Deadline)</label>
+                <label className="block text-zinc-600 font-medium mb-1">Target Selesai (Deadline)</label>
                 <input
                   type="date"
                   required
@@ -332,16 +274,16 @@ export default function NewOrderPage() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-zinc-600 font-medium mb-1">Harga / Pcs (Rp)</label>
+                  <label className="block text-zinc-600 font-medium mb-1">Total (Rp)</label>
                   <input
                     type="number"
-                    value={pricePerPcs}
-                    onChange={(e) => setPricePerPcs(Number(e.target.value))}
+                    value={totalPrice}
+                    onChange={(e) => setTotalPrice(Number(e.target.value))}
                     className="w-full px-2 py-1.5 border border-zinc-300 rounded font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-zinc-600 font-medium mb-1">Uang Muka / DP (Rp)</label>
+                  <label className="block text-zinc-600 font-medium mb-1">DP (Rp)</label>
                   <input
                     type="number"
                     value={downPayment}
@@ -351,54 +293,118 @@ export default function NewOrderPage() {
                 </div>
               </div>
               <div className="pt-2 border-t flex justify-between items-center text-xs">
-                <span className="text-zinc-600">Total Biaya ({totalQty} pcs):</span>
-                <span className="font-bold font-mono text-sm text-zinc-900">
-                  Rp {totalPrice.toLocaleString("id-ID")}
+                <span className="text-zinc-600">Sisa Tagihan:</span>
+                <span className="font-bold font-mono text-sm text-red-600">
+                  Rp {(totalPrice - downPayment > 0 ? totalPrice - downPayment : 0).toLocaleString("id-ID")}
                 </span>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="border border-zinc-200 bg-white rounded overflow-hidden shadow-2xs">
-          <div className="p-3 border-b border-zinc-200 bg-zinc-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <span className="text-xs font-semibold text-zinc-800 flex items-center gap-1.5">
-              <Layers className="h-3.5 w-3.5 text-zinc-600" /> Rincian Roster Jersey ({totalQty} Pcs Terdaftar)
-            </span>
+        {/* JALUR PENGERJAAN JAHIT (INTERNAL VS DROPDOWN MAKLOON) */}
+        <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
+          <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
+            <Users2 className="h-3.5 w-3.5 text-zinc-600" /> Jalur Pengerjaan Jahit (Tercetak di SPK)
+          </span>
 
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 bg-white border border-zinc-300 px-2 py-1 rounded shadow-2xs">
-                <span className="text-[11px] text-zinc-500">Jumlah:</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={200}
-                  value={targetBatchQty}
-                  onChange={(e) => setTargetBatchQty(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-12 text-center text-xs font-mono font-bold border-0 focus:outline-none"
-                />
-                <span className="text-[11px] text-zinc-500">Pcs</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div className="space-y-1.5">
+              <label className="block text-zinc-700 font-semibold">Tipe Pelaksana</label>
+              <div className="flex items-center gap-4 pt-1">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="sewing_route"
+                    checked={!isMakloon}
+                    onChange={() => setIsMakloon(false)}
+                    className="text-zinc-900 focus:ring-zinc-900"
+                  />
+                  <span className="font-medium text-zinc-800">Jahit Internal Workshop</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="sewing_route"
+                    checked={isMakloon}
+                    onChange={() => setIsMakloon(true)}
+                    className="text-zinc-900 focus:ring-zinc-900"
+                  />
+                  <span className="font-medium text-purple-800 font-semibold">Mitra Makloon Luar</span>
+                </label>
               </div>
-              <button
-                type="button"
-                onClick={handleGenerateBatchRows}
-                className="inline-flex items-center gap-1 bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-medium px-2.5 py-1.5 rounded transition-colors shadow-2xs"
-                title="Buat baris roster kosong sesuai jumlah di atas"
-              >
-                <Sparkles className="h-3 w-3" />
-                <span>Buat Baris Cepat</span>
-              </button>
-              <div className="h-4 w-px bg-zinc-300" />
-              <button
-                type="button"
-                onClick={handleAddRow}
-                className="inline-flex items-center gap-1 bg-white border border-zinc-300 hover:bg-zinc-100 text-zinc-800 text-[11px] font-medium px-2 py-1.5 rounded transition-colors"
-                title="Tambah 1 baris"
-              >
-                <Plus className="h-3 w-3" />
-                <span>+1 Baris</span>
-              </button>
             </div>
+
+            {isMakloon && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="block text-purple-900 font-semibold">Pilih Mitra Makloon</label>
+                  <Link href="/makloon" target="_blank" className="text-[10px] text-purple-700 hover:underline">
+                    + Kelola Partner
+                  </Link>
+                </div>
+
+                {partnerList.length > 0 ? (
+                  <select
+                    value={makloonVendorName}
+                    onChange={(e) => setMakloonVendorName(e.target.value)}
+                    required={isMakloon}
+                    className="w-full px-2.5 py-1.5 border border-purple-300 rounded text-xs focus:ring-1 focus:ring-purple-600 focus:outline-none bg-purple-50/50 font-medium text-zinc-900"
+                  >
+                    <option value="">-- Pilih Partner Makloon Terdaftar --</option>
+                    {partnerList.map((p) => (
+                      <option key={p.id} value={p.name}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="space-y-1">
+                    <input
+                      type="text"
+                      placeholder="Belum ada data partner di menu Makloon, ketik nama di sini..."
+                      value={makloonVendorName}
+                      onChange={(e) => setMakloonVendorName(e.target.value)}
+                      required={isMakloon}
+                      className="w-full px-2.5 py-1.5 border border-purple-300 rounded text-xs focus:ring-1 focus:ring-purple-600 focus:outline-none bg-purple-50/50 text-zinc-900"
+                    />
+                    <span className="text-[10px] text-amber-700 block">
+                      Tip: Daftarkan partner di menu <strong>Partner Makloon</strong> agar tersimpan rapi sebagai dropdown.
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* CATATAN TEKNIS */}
+        <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-2">
+          <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight">
+            Catatan Teknis & Instruksi Produksi
+          </span>
+          <textarea
+            rows={3}
+            value={productionNotes}
+            onChange={(e) => setProductionNotes(e.target.value)}
+            placeholder="Instruksi tambahan untuk penjahit atau pemotong kain..."
+            className="w-full p-2.5 border border-zinc-300 rounded text-xs focus:ring-1 focus:ring-zinc-900 focus:outline-none text-zinc-800 leading-relaxed placeholder:text-zinc-400"
+          />
+        </div>
+
+        {/* TABEL ROSTER AWAL */}
+        <div className="border border-zinc-200 bg-white rounded overflow-hidden shadow-2xs">
+          <div className="p-3 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between">
+            <span className="text-xs font-semibold text-zinc-800 flex items-center gap-1.5">
+              <Layers className="h-3.5 w-3.5 text-zinc-600" /> Roster Pemain Awal ({roster.length} Pcs)
+            </span>
+            <button
+              type="button"
+              onClick={handleAddRow}
+              className="inline-flex items-center gap-1 bg-white border border-zinc-300 hover:bg-zinc-100 text-zinc-800 text-[11px] font-medium px-2.5 py-1 rounded transition-colors"
+            >
+              <Plus className="h-3 w-3" /> Tambah Baris
+            </button>
           </div>
 
           <div className="overflow-x-auto">
@@ -417,9 +423,7 @@ export default function NewOrderPage() {
               <tbody className="divide-y divide-zinc-200">
                 {roster.map((row, index) => (
                   <tr key={index} className="hover:bg-zinc-50/50">
-                    <td className="py-1.5 px-3 text-center text-zinc-600 font-mono text-[11px]">
-                      {index + 1}
-                    </td>
+                    <td className="py-1.5 px-3 text-center text-zinc-600 font-mono text-[11px]">{index + 1}</td>
                     <td className="py-1.5 px-3">
                       <input
                         type="text"
@@ -442,7 +446,7 @@ export default function NewOrderPage() {
                       <select
                         value={row.size}
                         onChange={(e) => handleRosterChange(index, "size", e.target.value)}
-                        className="w-full px-1.5 py-1 border border-zinc-200 rounded text-xs bg-white focus:outline-none"
+                        className="w-full px-1.5 py-1 border border-zinc-200 rounded text-xs bg-white focus:outline-none font-semibold"
                       >
                         {SIZE_OPTIONS.map((sz) => (
                           <option key={sz} value={sz}>{sz}</option>
@@ -456,13 +460,13 @@ export default function NewOrderPage() {
                         className="w-full px-1.5 py-1 border border-zinc-200 rounded text-xs bg-white focus:outline-none"
                       >
                         <option value="SHORT">Pendek</option>
-                        <option value="LONG">Panjang (+Manset)</option>
+                        <option value="LONG">Panjang</option>
                       </select>
                     </td>
                     <td className="py-1.5 px-3">
                       <input
                         type="text"
-                        placeholder="Opsional (cth: GK Kuning)"
+                        placeholder="Opsional (cth: Kiper)"
                         value={row.notes}
                         onChange={(e) => handleRosterChange(index, "notes", e.target.value)}
                         className="w-full px-2 py-1 border border-zinc-200 rounded text-xs focus:outline-none text-zinc-600"
@@ -473,7 +477,7 @@ export default function NewOrderPage() {
                         type="button"
                         onClick={() => handleRemoveRow(index)}
                         disabled={roster.length <= 1}
-                        className="text-zinc-500 hover:text-red-600 disabled:opacity-30 p-1"
+                        className="text-zinc-400 hover:text-red-600 disabled:opacity-30 p-1"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -487,18 +491,18 @@ export default function NewOrderPage() {
 
         <div className="flex justify-end gap-3 pt-2">
           <Link
-            href="/"
+            href="/orders"
             className="px-4 py-2 text-xs font-medium border border-zinc-300 rounded hover:bg-zinc-100 text-zinc-700 transition-colors"
           >
             Batal
           </Link>
           <button
             type="submit"
-            disabled={loading}
+            disabled={submitting}
             className="inline-flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold px-5 py-2 rounded shadow-sm transition-colors disabled:opacity-50"
           >
             <Save className="h-3.5 w-3.5" />
-            {loading ? "Menyimpan Order..." : "Simpan Pesanan & Lengkapi Mockup"}
+            {submitting ? "Menyimpan Pesanan..." : "Simpan Pesanan"}
           </button>
         </div>
       </form>

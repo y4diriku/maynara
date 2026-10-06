@@ -13,14 +13,14 @@ import {
   Shirt, 
   User, 
   DollarSign, 
-  Layers,
-  Printer,
-  UploadCloud,
-  ImageIcon,
-  FileText,
-  X,
-  PieChart,
-  Users2
+  Layers, 
+  Printer, 
+  UploadCloud, 
+  ImageIcon, 
+  FileText, 
+  X, 
+  PieChart, 
+  Users2 
 } from "lucide-react"
 
 interface RosterItem {
@@ -30,6 +30,11 @@ interface RosterItem {
   size: string
   sleeve_type: "SHORT" | "LONG"
   notes: string
+}
+
+interface PartnerItem {
+  id: string
+  name: string
 }
 
 const FABRIC_OPTIONS = [
@@ -71,10 +76,11 @@ export default function OrderDetailPage() {
   const [currentStatus, setCurrentStatus] = useState("")
   const [productionNotes, setProductionNotes] = useState("")
 
-  // Pilihan Pelaksana Jahit (Internal vs Makloon)
+  // Pilihan Pelaksana Jahit & Partner Makloon
   const [isMakloon, setIsMakloon] = useState(false)
   const [makloonVendorName, setMakloonVendorName] = useState("")
-  const [partnerList, setPartnerList] = useState<string[]>([])
+  const [partnerList, setPartnerList] = useState<PartnerItem[]>([])
+  const [loadingPartners, setLoadingPartners] = useState(false)
 
   const [mockupUrl1, setMockupUrl1] = useState<string | null>(null)
   const [mockupUrl2, setMockupUrl2] = useState<string | null>(null)
@@ -88,6 +94,7 @@ export default function OrderDetailPage() {
       if (!orderId) return
       setLoading(true)
 
+      // 1. Ambil data order
       const { data: oData, error: oErr } = await supabase
         .from("orders")
         .select("*")
@@ -117,12 +124,23 @@ export default function OrderDetailPage() {
       setMockupUrl2(oData.mockup_url_2 || null)
       setMockupUrl3(oData.mockup_url_3 || null)
 
-      // Ambil daftar nama partner makloon dari tabel makloon_partners jika ada
-      const { data: pData } = await supabase.from("makloon_partners").select("name")
-      if (pData && pData.length > 0) {
-        setPartnerList(pData.map((p) => p.name))
-      }
+      // 2. Ambil daftar partner makloon (toleransi fleksibel terhadap nama kolom)
+      setLoadingPartners(true)
+      const { data: pData } = await supabase
+        .from("makloon_partners")
+        .select("*")
+        .order("created_at", { ascending: false })
 
+      if (pData && pData.length > 0) {
+        const mapped = pData.map((p: any) => ({
+          id: p.id,
+          name: p.name || p.partner_name || p.vendor_name || "Tanpa Nama"
+        }))
+        setPartnerList(mapped)
+      }
+      setLoadingPartners(false)
+
+      // 3. Ambil data roster
       const { data: rData } = await supabase
         .from("order_roster_items")
         .select("*")
@@ -187,7 +205,7 @@ export default function OrderDetailPage() {
       else if (slot === 2) setMockupUrl2(freshUrl)
       else setMockupUrl3(freshUrl)
 
-      setMsg(`Gambar ${slot} berhasil diunggah & dioptimasi!`)
+      setMsg(`Gambar ${slot} berhasil diunggah!`)
     } catch (err: any) {
       setMsg("Gagal unggah: " + err.message)
     } finally {
@@ -539,7 +557,7 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* PILIHAN PELAKSANA JALUR JAHIT (INTERNAL VS MAKLOON) */}
+        {/* PILIHAN PELAKSANA JALUR JAHIT (INTERNAL VS MAKLOON DENGAN DROPDOWN MITRA) */}
         <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
           <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
             <Users2 className="h-3.5 w-3.5 text-zinc-600" /> Jalur Pengerjaan Jahit (Tercetak di SPK)
@@ -574,26 +592,43 @@ export default function OrderDetailPage() {
 
             {isMakloon && (
               <div className="space-y-1">
-                <label className="block text-purple-900 font-semibold">Pilih Mitra Makloon</label>
-                {partnerList.length > 0 ? (
+                <div className="flex items-center justify-between">
+                  <label className="block text-purple-900 font-semibold">Pilih Mitra Makloon</label>
+                  <Link href="/makloon" target="_blank" className="text-[10px] text-purple-700 hover:underline">
+                    + Kelola Partner
+                  </Link>
+                </div>
+
+                {loadingPartners ? (
+                  <div className="text-zinc-400 font-mono text-[11px] py-1.5">Memuat daftar partner...</div>
+                ) : partnerList.length > 0 ? (
                   <select
                     value={makloonVendorName}
                     onChange={(e) => setMakloonVendorName(e.target.value)}
-                    className="w-full px-2.5 py-1.5 border border-purple-300 rounded text-xs focus:ring-1 focus:ring-purple-600 focus:outline-none bg-purple-50/50 font-medium"
+                    required={isMakloon}
+                    className="w-full px-2.5 py-1.5 border border-purple-300 rounded text-xs focus:ring-1 focus:ring-purple-600 focus:outline-none bg-purple-50/50 font-medium text-zinc-900"
                   >
                     <option value="">-- Pilih Partner Makloon Terdaftar --</option>
                     {partnerList.map((p) => (
-                      <option key={p} value={p}>{p}</option>
+                      <option key={p.id} value={p.name}>
+                        {p.name}
+                      </option>
                     ))}
                   </select>
                 ) : (
-                  <input
-                    type="text"
-                    placeholder="Ketik nama mitra makloon (misal: Konveksi Barokah)"
-                    value={makloonVendorName}
-                    onChange={(e) => setMakloonVendorName(e.target.value)}
-                    className="w-full px-2.5 py-1.5 border border-purple-300 rounded text-xs focus:ring-1 focus:ring-purple-600 focus:outline-none bg-purple-50/50"
-                  />
+                  <div className="space-y-1">
+                    <input
+                      type="text"
+                      placeholder="Belum ada data partner di menu Makloon, ketik nama di sini..."
+                      value={makloonVendorName}
+                      onChange={(e) => setMakloonVendorName(e.target.value)}
+                      required={isMakloon}
+                      className="w-full px-2.5 py-1.5 border border-purple-300 rounded text-xs focus:ring-1 focus:ring-purple-600 focus:outline-none bg-purple-50/50 text-zinc-900"
+                    />
+                    <span className="text-[10px] text-amber-700 block">
+                      Tip: Daftarkan partner di menu <strong>Partner Makloon</strong> agar tersimpan rapi sebagai dropdown.
+                    </span>
+                  </div>
                 )}
                 <span className="text-[10px] text-zinc-500 block">
                   Nama mitra akan tercantum pada kop dan kotak paraf SPK fisik.
@@ -603,7 +638,7 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* CATATAN TEKNIS (BERSIH DARI TEKS FULL WIDTH) */}
+        {/* CATATAN TEKNIS */}
         <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-2">
           <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5">
             <FileText className="h-3.5 w-3.5 text-zinc-500" /> Catatan Teknis & Instruksi Produksi
