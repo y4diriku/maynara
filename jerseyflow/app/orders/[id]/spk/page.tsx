@@ -290,7 +290,7 @@ export default function SPKPrintPage() {
         <div className="mt-2.5">
           <div className="flex items-center justify-between mb-1.5 gap-2">
             <h3 className="text-[10px] font-black uppercase tracking-wider">
-              RINCIAN ROSTER PEMAIN ({roster.length} POTONG)
+              DAFTAR RINCIAN PESANAN ({roster.length} PCS)
             </h3>
 
             {/* REKAP UKURAN DI SEBELAH KANAN: JELAS & MUDAH DILIHAT */}
@@ -341,7 +341,7 @@ export default function SPKPrintPage() {
             </tbody>
           </table>
           <div className="text-[8px] text-zinc-500 font-mono mt-0.5 text-right italic">
-            * Kolom [QC &radic;] wajib dicentang manual oleh mandor saat selesai tahap penjahitan.
+            * Kolom [QC &radic;] wajib dicentang manual oleh PIC saat selesai tahap penjahitan.
           </div>
         </div>
 
