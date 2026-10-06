@@ -57,21 +57,49 @@ const STAGES = [
 export default function KanbanDashboard() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [filterQuery, setFilterQuery] = useState("")
 
-  const fetchOrders = async () => {
-    setLoading(true)
-    const { data, error } = await supabase
-      .from("orders")
-      .select("*")
-      .neq("current_status", "COMPLETED")
-      .neq("current_status", "CANCELLED")
-      .order("deadline_date", { ascending: true })
-
-    if (!error && data) {
-      setOrders(data)
+  // 1. INSTANT CACHE HYDRATION: Muat data dari memori browser seketika (0 ms)
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem("manayra_cached_orders")
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setOrders(parsed)
+          setLoading(false)
+        }
+      }
+    } catch {
+      // Fallback jika localStorage tidak tersedia
     }
-    setLoading(false)
+  }, [])
+
+  // 2. BACKGROUND FETCH: Sinkronisasi data ke Supabase tanpa memblokir layar
+  const fetchOrders = async (showSpinner = false) => {
+    if (showSpinner) setIsRefreshing(true)
+    
+    try {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*")
+        .neq("current_status", "COMPLETED")
+        .neq("current_status", "CANCELLED")
+        .order("deadline_date", { ascending: true })
+
+      if (!error && data) {
+        setOrders(data)
+        try {
+          localStorage.setItem("manayra_cached_orders", JSON.stringify(data))
+        } catch {}
+      }
+    } catch (err) {
+      console.error("Gagal sinkron data:", err)
+    } finally {
+      setLoading(false)
+      setIsRefreshing(false)
+    }
   }
 
   useEffect(() => {
@@ -102,9 +130,14 @@ export default function KanbanDashboard() {
 
     const targetStage = STAGES[targetIndex].key
 
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, current_status: targetStage } : o))
-    )
+    // Optimistic UI Update: Langsung ubah di layar tanpa jeda
+    setOrders((prev) => {
+      const updated = prev.map((o) => (o.id === orderId ? { ...o, current_status: targetStage } : o))
+      try {
+        localStorage.setItem("manayra_cached_orders", JSON.stringify(updated))
+      } catch {}
+      return updated
+    })
 
     await supabase
       .from("orders")
@@ -118,7 +151,6 @@ export default function KanbanDashboard() {
     })
   }
 
-  // Format Masa Tenggat Baku & Jelas: "14 Hari lagi"
   const calculateSLA = (deadlineDateStr: string) => {
     const now = new Date()
     const target = new Date(deadlineDateStr)
@@ -158,11 +190,11 @@ export default function KanbanDashboard() {
           />
           <button
             type="button"
-            onClick={fetchOrders}
+            onClick={() => fetchOrders(true)}
             className="p-1 border border-zinc-200 rounded hover:bg-zinc-50 text-zinc-600 transition-colors"
-            title="Refresh Data"
+            title="Refresh Data Terbaru"
           >
-            <RefreshCw className={loading ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
+            <RefreshCw className={isRefreshing ? "h-3.5 w-3.5 animate-spin text-zinc-900" : "h-3.5 w-3.5"} />
           </button>
         </div>
 
@@ -219,9 +251,21 @@ export default function KanbanDashboard() {
                 </div>
               </div>
 
-              {/* Daftar Kartu */}
+              {/* Daftar Kartu / Skeleton Loader */}
               <div className="p-1.5 space-y-2 overflow-y-auto flex-1">
-                {columnOrders.length === 0 ? (
+                {loading && orders.length === 0 ? (
+                  /* SKELETON PLACEHOLDER SAAT PERTAMA KALI KUNJUNGAN */
+                  <div className="space-y-2 animate-pulse">
+                    {[1, 2].map((s) => (
+                      <div key={s} className="bg-white border border-zinc-200 rounded p-2.5 space-y-2">
+                        <div className="h-3 bg-zinc-200 rounded w-2/3" />
+                        <div className="h-2.5 bg-zinc-100 rounded w-1/2" />
+                        <div className="h-6 bg-zinc-100 rounded w-full" />
+                        <div className="h-5 bg-zinc-200/70 rounded w-full" />
+                      </div>
+                    ))}
+                  </div>
+                ) : columnOrders.length === 0 ? (
                   <div className="py-8 text-center text-zinc-400 text-[10px] border border-dashed border-zinc-200/80 rounded bg-white/40">
                     Kosong
                   </div>
@@ -237,7 +281,7 @@ export default function KanbanDashboard() {
                         key={order.id}
                         className="bg-white border border-zinc-200 rounded p-2.5 shadow-2xs space-y-2 hover:border-zinc-400 transition-colors"
                       >
-                        {/* 1. HEADER CARD 2 BARIS */}
+                        {/* 1. Header Card 2 Baris */}
                         <div className="space-y-1 border-b border-zinc-100 pb-1.5">
                           <div className="text-[11px] font-mono font-black text-zinc-900 tracking-tight truncate">
                             {order.order_number}
@@ -263,7 +307,7 @@ export default function KanbanDashboard() {
                           </div>
                         </div>
 
-                        {/* 2. CUSTOMER & SPESIFIKASI */}
+                        {/* 2. Customer & Spesifikasi */}
                         <div className="space-y-0.5">
                           <p className="text-[11px] font-bold text-zinc-900 truncate leading-tight" title={order.customer_name}>
                             {order.customer_name}
@@ -276,7 +320,7 @@ export default function KanbanDashboard() {
                           </div>
                         </div>
 
-                        {/* 3. KOTAK AKSI TAHAPAN */}
+                        {/* 3. Kotak Aksi Tahapan */}
                         {col.key === "DESIGN_QUEUE" && (
                           <div className="bg-zinc-50 border border-zinc-200 rounded p-1.5 space-y-1">
                             <Link
@@ -370,7 +414,7 @@ export default function KanbanDashboard() {
                           </div>
                         )}
 
-                        {/* 4. FOOTER NAVIGASI */}
+                        {/* 4. Footer Navigasi */}
                         <div className="pt-1.5 border-t border-zinc-100 flex items-center justify-between gap-1">
                           <button
                             type="button"
