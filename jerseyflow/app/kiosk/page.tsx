@@ -7,8 +7,6 @@ import {
   QrCode, 
   CheckCircle2, 
   RotateCcw, 
-  Shirt, 
-  Calendar, 
   AlertCircle,
   Clock,
   Camera,
@@ -40,13 +38,8 @@ interface AuditLog {
   created_at: string
   operator_name?: string | null
   operator_role?: string | null
-  profiles?: {
-    full_name: string | null
-    role: string | null
-  } | null
 }
 
-// Konfigurasi Tahap & Role yang Berhak Memproses
 const STAGES_CONFIG: { [key: string]: { label: string; next: string; nextLabel: string; allowedRoles: string[] } } = {
   DESIGN_QUEUE: {
     label: "Antrean Desain",
@@ -103,6 +96,18 @@ function formatTimeID(dateStr?: string | null): string {
   return d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WIB"
 }
 
+// Fungsi pembantu: Memastikan baris terbaru selalu di urutan paling pertama (Index 0)
+function sortAuditLogsDescending(logs: AuditLog[]): AuditLog[] {
+  return [...logs].sort((a, b) => {
+    const timeA = a.created_at ? new Date(a.created_at).getTime() : 0
+    const timeB = b.created_at ? new Date(b.created_at).getTime() : 0
+    if (timeA !== timeB) {
+      return timeB - timeA
+    }
+    return (b.id || "").localeCompare(a.id || "")
+  })
+}
+
 function KioskContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -115,20 +120,18 @@ function KioskContent() {
   const [updating, setUpdating] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null)
 
-  // Status Handover
   const [completedStageInfo, setCompletedStageInfo] = useState<{
     stageFinished: string
     nextStage: string
     operatorName: string
   } | null>(null)
 
-  // Info Operator yang login
-  const [operatorInfo, setOperatorInfo] = useState<{ name: string; role: string }>({
+  const [operatorInfo, setOperatorInfo] = useState<{ name: string; role: string; id: string | null }>({
     name: "Operator",
-    role: "OPERATOR_PRINT"
+    role: "OPERATOR_PRINT",
+    id: null
   })
 
-  // Fitur Kamera Scanner
   const [isCameraActive, setIsCameraActive] = useState(false)
   const scannerRef = useRef<any>(null)
 
@@ -142,24 +145,33 @@ function KioskContent() {
           .eq("id", session.user.id)
           .single()
 
-        if (profile) {
-          setOperatorInfo({
-            name: profile.full_name || session.user.email?.split("@")[0] || "Operator",
-            role: (profile.role || "OPERATOR_PRINT").toUpperCase()
-          })
-        }
+        setOperatorInfo({
+          name: profile?.full_name || session.user.email?.split("@")[0] || "Operator",
+          role: (profile?.role || "OPERATOR_PRINT").toUpperCase(),
+          id: session.user.id
+        })
       }
     }
     getOperator()
   }, [])
 
-  useEffect(() => {
-    if (initialOrderQuery) {
-      handleLookup(initialOrderQuery)
-    }
-  }, [initialOrderQuery])
+  const loadAuditLogs = async (orderId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("production_logs")
+        .select("*")
+        .eq("order_id", orderId)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
 
-  // Ambil Data Order & Seluruh Log Riwayat (Audit Trail)
+      if (!error && data) {
+        setAuditLogs(sortAuditLogsDescending(data))
+      }
+    } catch (err) {
+      console.error("Gagal load audit:", err)
+    }
+  }
+
   const handleLookup = async (queryNum?: string) => {
     const target = (queryNum || orderNumberInput).trim()
     if (!target) return
@@ -182,16 +194,18 @@ function KioskContent() {
       } else {
         setCurrentOrder(oData)
 
-        // Ambil Audit Trail Log secara langsung dan tahan banting
-        const { data: lData, error: lErr } = await supabase
-          .from("production_logs")
-          .select("*")
-          .eq("order_id", oData.id)
-          .order("created_at", { ascending: false }).order("id", { ascending: false })
+        // Catat otomatis pemindaian SPK
+        const stageName = STAGES_CONFIG[oData.current_status]?.label || oData.current_status
+        await supabase.from("production_logs").insert({
+          order_id: oData.id,
+          stage: oData.current_status,
+          notes: `SPK dipindai & diverifikasi di pos [${stageName}] oleh ${operatorInfo.name} (${operatorInfo.role}).`,
+          operator_name: operatorInfo.name,
+          operator_role: operatorInfo.role,
+          operator_id: operatorInfo.id
+        })
 
-        if (!lErr && lData) {
-          setAuditLogs(lData)
-        }
+        await loadAuditLogs(oData.id)
       }
     } catch (err: any) {
       setMessage({ type: "error", text: err.message || "Gagal memuat SPK" })
@@ -200,7 +214,12 @@ function KioskContent() {
     }
   }
 
-  // Toggle Buka / Tutup Kamera HP
+  useEffect(() => {
+    if (initialOrderQuery && operatorInfo.id) {
+      handleLookup(initialOrderQuery)
+    }
+  }, [initialOrderQuery, operatorInfo.id])
+
   const toggleCamera = async () => {
     if (isCameraActive) {
       if (scannerRef.current) {
@@ -213,7 +232,6 @@ function KioskContent() {
     } else {
       setIsCameraActive(true)
       try {
-        // Dinamic import html5-qrcode
         const { Html5Qrcode } = await import("html5-qrcode")
         const qrCodeScanner = new Html5Qrcode("kiosk-qr-reader")
         scannerRef.current = qrCodeScanner
@@ -222,7 +240,6 @@ function KioskContent() {
           { facingMode: "environment" },
           { fps: 10, qrbox: { width: 250, height: 250 } },
           (decodedText) => {
-            // Jika decodedText berupa URL (cth: https://.../kiosk?order=JR-123)
             let scannedOrder = decodedText
             try {
               const url = new URL(decodedText)
@@ -238,14 +255,12 @@ function KioskContent() {
           () => {}
         )
       } catch (err) {
-        console.error("Gagal membuka kamera:", err)
-        setMessage({ type: "error", text: "Tidak dapat mengakses kamera. Pastikan izin kamera aktif di browser Anda." })
+        setMessage({ type: "error", text: "Kamera tidak dapat diakses. Pastikan izin kamera aktif di browser." })
         setIsCameraActive(false)
       }
     }
   }
 
-  // Pengecekan Wewenang (Role Guard)
   const currentStageConfig = currentOrder ? STAGES_CONFIG[currentOrder.current_status] : null
   const userHasPermission = currentStageConfig
     ? currentStageConfig.allowedRoles.includes(operatorInfo.role) ||
@@ -253,7 +268,6 @@ function KioskContent() {
       operatorInfo.role === "ADMIN"
     : false
 
-  // Eksekusi Perpindahan Pos & Catat Audit Trail
   const handleFinishCurrentStage = async () => {
     if (!currentOrder || !currentStageConfig || !userHasPermission) return
     setUpdating(true)
@@ -264,9 +278,6 @@ function KioskContent() {
     const nextLabel = currentStageConfig.nextLabel
 
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-
-      // 1. Update status di tabel orders
       const { error: updateErr } = await supabase
         .from("orders")
         .update({
@@ -277,22 +288,20 @@ function KioskContent() {
 
       if (updateErr) throw updateErr
 
-      // 2. Simpan Rekam Jejak Audit Trail Lengkap
-      const auditNote = `Tugas pos [${finishedLabel}] diselesaikan dan diserahkan ke [${nextLabel}].`
+      const auditNote = `Tugas pos [${finishedLabel}] telah diselesaikan. Kain & SPK diserahkan ke pos [${nextLabel}].`
       const { error: logErr } = await supabase.from("production_logs").insert({
         order_id: currentOrder.id,
         stage: nextStageKey,
         notes: auditNote,
         operator_name: operatorInfo.name,
         operator_role: operatorInfo.role,
-        operator_id: session?.user?.id || null
+        operator_id: operatorInfo.id
       })
 
-      if (logErr) {
-        console.warn("Gagal simpan log audit:", logErr)
-      }
+      if (logErr) throw logErr
 
-      // 3. Tampilkan Layar Sukses / Handover
+      await loadAuditLogs(currentOrder.id)
+
       setCompletedStageInfo({
         stageFinished: finishedLabel,
         nextStage: nextLabel,
@@ -301,7 +310,7 @@ function KioskContent() {
 
       setCurrentOrder((prev) => prev ? { ...prev, current_status: nextStageKey } : null)
     } catch (err: any) {
-      setMessage({ type: "error", text: "Gagal menyimpan: " + err.message })
+      setMessage({ type: "error", text: "Gagal menyimpan log: " + err.message })
     } finally {
       setUpdating(false)
     }
@@ -318,7 +327,7 @@ function KioskContent() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-4 pb-16 pt-1">
-      {/* 1. Header Identitas Operator & Pos */}
+      {/* 1. Header Identitas Operator */}
       <div className="border border-zinc-200 bg-white p-3 rounded-lg shadow-2xs flex items-center justify-between">
         <div>
           <h1 className="text-sm font-black text-zinc-900 flex items-center gap-1.5 uppercase tracking-tight">
@@ -348,17 +357,17 @@ function KioskContent() {
         </button>
       </div>
 
-      {/* Kotak Tampilan Kamera Scanner */}
+      {/* Kotak Scanner Kamera */}
       {isCameraActive && (
         <div className="border-2 border-zinc-900 bg-black rounded-lg overflow-hidden p-2 space-y-2">
           <div id="kiosk-qr-reader" className="w-full h-64 bg-zinc-950 flex items-center justify-center text-white text-xs font-mono" />
           <p className="text-[11px] text-zinc-300 text-center font-mono">
-            Arahkan kamera ke QR Code di pojok kanan atas lembar SPK
+            Arahkan kamera ke QR Code di lembar SPK
           </p>
         </div>
       )}
 
-      {/* Pencarian Manual No Order */}
+      {/* Input Pencarian Manual */}
       <div className="border border-zinc-200 bg-white p-2.5 rounded shadow-2xs">
         <form
           onSubmit={(e) => {
@@ -395,7 +404,7 @@ function KioskContent() {
         </div>
       )}
 
-      {/* 2. LAYAR KONFIRMASI SUKSES & SERAH TERIMA */}
+      {/* 2. Layar Sukses Serah Terima */}
       {completedStageInfo ? (
         <div className="border-2 border-emerald-500 bg-emerald-50/70 p-6 rounded-lg shadow-sm text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
           <div className="h-14 w-14 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto shadow-sm">
@@ -435,10 +444,9 @@ function KioskContent() {
           </div>
         </div>
       ) : currentOrder ? (
-        /* 3. RINCIAN SPK DENGAN ROLE GUARD & AUDIT TRAIL */
+        /* 3. Detail SPK */
         <div className="space-y-4">
           <div className="border border-zinc-200 bg-white rounded-lg shadow-2xs overflow-hidden">
-            {/* Header SPK */}
             <div className="bg-zinc-900 text-white p-3 flex items-center justify-between">
               <div>
                 <span className="text-[9px] text-zinc-400 uppercase font-mono tracking-wider block">
@@ -451,7 +459,6 @@ function KioskContent() {
               </span>
             </div>
 
-            {/* Spesifikasi Ringkas */}
             <div className="p-3.5 space-y-3">
               <div className="grid grid-cols-2 gap-2.5 text-xs border-b border-zinc-100 pb-3">
                 <div>
@@ -472,7 +479,6 @@ function KioskContent() {
                 </div>
               </div>
 
-              {/* Status Pos Saat Ini */}
               <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50 space-y-1">
                 <span className="text-[9px] uppercase font-bold text-zinc-500 block">Posisi Pengerjaan Saat Ini</span>
                 <div className="flex items-center justify-between">
@@ -485,9 +491,7 @@ function KioskContent() {
                 </div>
               </div>
 
-              {/* ROLE GUARD VALIDATION */}
               {userHasPermission ? (
-                /* JIKA ROLE SESUAI DENGAN TUGAS POS */
                 <div className="pt-1">
                   <button
                     type="button"
@@ -504,7 +508,6 @@ function KioskContent() {
                   </button>
                 </div>
               ) : (
-                /* JIKA ROLE TIDAK BERWENANG MEMINDAHKAN POS INI */
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-amber-900 text-xs space-y-1">
                   <div className="flex items-center gap-1.5 font-bold">
                     <ShieldAlert className="h-4 w-4 text-amber-700 shrink-0" />
@@ -518,7 +521,7 @@ function KioskContent() {
             </div>
           </div>
 
-          {/* 4. AUDIT TRAIL TIMELINE (RIWAYAT LENGKAP YANG BISA DILIHAT SEMUA DIVISI) */}
+          {/* 4. Timeline Riwayat Audit Trail Terbalik (Terbaru Selalu di Paling Atas) */}
           <div className="border border-zinc-200 bg-white rounded-lg p-3.5 shadow-2xs space-y-2.5">
             <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
               <span className="text-xs font-bold text-zinc-900 flex items-center gap-1.5 uppercase tracking-tight">
@@ -535,19 +538,36 @@ function KioskContent() {
               </div>
             ) : (
               <div className="space-y-2.5">
-                {auditLogs.map((log) => {
-                  const picName = log.operator_name || log.profiles?.full_name || "Staf Workshop"
-                  const picRole = log.operator_role || log.profiles?.role || "OPERATOR"
+                {auditLogs.map((log, index) => {
+                  const picName = log.operator_name || "Staf Workshop"
+                  const picRole = log.operator_role || "OPERATOR"
+                  const isLatest = index === 0
 
                   return (
-                    <div key={log.id} className="border-l-2 border-zinc-900 pl-3 py-0.5 space-y-0.5 text-xs">
+                    <div
+                      key={log.id}
+                      className={
+                        "pl-3 py-1.5 space-y-0.5 text-xs border-l-2 " +
+                        (isLatest
+                          ? "border-emerald-600 bg-emerald-50/50 rounded-r p-2 -ml-0.5"
+                          : "border-zinc-200")
+                      }
+                    >
                       <div className="flex items-center justify-between text-[11px]">
-                        <strong className="text-zinc-900 font-bold">
-                          {picName}
-                          <span className="text-zinc-500 font-mono font-medium ml-1.5 px-1 py-0.2 bg-zinc-100 rounded text-[10px] border border-zinc-200">
+                        <div className="flex items-center gap-1.5">
+                          {isLatest && (
+                            <span className="bg-emerald-600 text-white font-mono text-[9px] font-bold px-1.5 py-0.2 rounded uppercase tracking-wider">
+                              Pos Terkini
+                            </span>
+                          )}
+                          <strong className="text-zinc-900 font-bold">
+                            {picName}
+                          </strong>
+                          <span className="text-zinc-500 font-mono font-medium px-1 py-0.2 bg-zinc-100 rounded text-[10px] border border-zinc-200">
                             {picRole}
                           </span>
-                        </strong>
+                        </div>
+
                         <span className="font-mono text-[10px] text-zinc-500 flex items-center gap-1">
                           <Clock className="h-3 w-3 text-zinc-400" />
                           {formatDateID(log.created_at)} &bull; {formatTimeID(log.created_at)}
