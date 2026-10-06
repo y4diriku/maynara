@@ -187,7 +187,7 @@ function KioskContent() {
           .from("production_logs")
           .select("*")
           .eq("order_id", oData.id)
-          .order("created_at", { ascending: false })
+          .order("created_at", { ascending: false }).order("id", { ascending: false })
 
         if (!lErr && lData) {
           setAuditLogs(lData)
