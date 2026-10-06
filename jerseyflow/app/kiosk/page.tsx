@@ -194,17 +194,7 @@ function KioskContent() {
       } else {
         setCurrentOrder(oData)
 
-        // Catat otomatis pemindaian SPK
-        const stageName = STAGES_CONFIG[oData.current_status]?.label || oData.current_status
-        await supabase.from("production_logs").insert({
-          order_id: oData.id,
-          stage: oData.current_status,
-          notes: `SPK dipindai & diverifikasi di pos [${stageName}] oleh ${operatorInfo.name} (${operatorInfo.role}).`,
-          operator_name: operatorInfo.name,
-          operator_role: operatorInfo.role,
-          operator_id: operatorInfo.id
-        })
-
+        // Hanya baca riwayat log tanpa menambah log sebelum divalidasi
         await loadAuditLogs(oData.id)
       }
     } catch (err: any) {
