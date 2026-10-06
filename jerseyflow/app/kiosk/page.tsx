@@ -1,19 +1,21 @@
 "use client"
 
-import { useEffect, useState, Suspense } from "react"
+import { useEffect, useState, useRef, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { 
   QrCode, 
   CheckCircle2, 
-  ArrowRight, 
   RotateCcw, 
   Shirt, 
   Calendar, 
   AlertCircle,
   Clock,
-  Printer,
-  Scissors,
+  Camera,
+  CameraOff,
+  History,
+  ShieldAlert,
+  User,
   CheckCheck
 } from "lucide-react"
 
@@ -31,14 +33,56 @@ interface Order {
   makloon_vendor_name?: string | null
 }
 
-const STAGES = [
-  { key: "DESIGN_QUEUE", label: "Antrean Desain", next: "PRINTING", nextLabel: "Cetak & Sublim" },
-  { key: "PRINTING", label: "Cetak & Sublim", next: "CUTTING", nextLabel: "Cutting Pola" },
-  { key: "CUTTING", label: "Cutting Pola", next: "SEWING", nextLabel: "Lini Jahit" },
-  { key: "SEWING", label: "Lini Jahit", next: "QC_PACKING", nextLabel: "QC & Packing" },
-  { key: "QC_PACKING", label: "QC & Packing", next: "READY_FOR_DELIVERY", nextLabel: "Siap Diambil" },
-  { key: "READY_FOR_DELIVERY", label: "Siap Diambil", next: "COMPLETED", nextLabel: "Pesanan Selesai" },
-]
+interface AuditLog {
+  id: string
+  stage: string
+  notes: string
+  created_at: string
+  profiles?: {
+    full_name: string | null
+    role: string | null
+  } | null
+}
+
+// Konfigurasi Tahap & Role yang Berhak Memproses
+const STAGES_CONFIG: { [key: string]: { label: string; next: string; nextLabel: string; allowedRoles: string[] } } = {
+  DESIGN_QUEUE: {
+    label: "Antrean Desain",
+    next: "PRINTING",
+    nextLabel: "Cetak & Sublim",
+    allowedRoles: ["OWNER", "ADMIN", "DESIGNER", "OPERATOR_PRINT"]
+  },
+  PRINTING: {
+    label: "Cetak & Sublim",
+    next: "CUTTING",
+    nextLabel: "Cutting Pola",
+    allowedRoles: ["OWNER", "ADMIN", "OPERATOR_PRINT"]
+  },
+  CUTTING: {
+    label: "Cutting Pola",
+    next: "SEWING",
+    nextLabel: "Lini Jahit",
+    allowedRoles: ["OWNER", "ADMIN", "OPERATOR_CUTTING"]
+  },
+  SEWING: {
+    label: "Lini Jahit",
+    next: "QC_PACKING",
+    nextLabel: "QC & Packing",
+    allowedRoles: ["OWNER", "ADMIN", "SEWING_SUPERVISOR", "OPERATOR_SEWING"]
+  },
+  QC_PACKING: {
+    label: "QC & Packing",
+    next: "READY_FOR_DELIVERY",
+    nextLabel: "Siap Diambil",
+    allowedRoles: ["OWNER", "ADMIN", "QC", "OPERATOR_PACKING"]
+  },
+  READY_FOR_DELIVERY: {
+    label: "Siap Diambil",
+    next: "COMPLETED",
+    nextLabel: "Pesanan Selesai",
+    allowedRoles: ["OWNER", "ADMIN"]
+  }
+}
 
 function formatDateID(dateStr?: string | null): string {
   if (!dateStr) return "-"
@@ -50,6 +94,13 @@ function formatDateID(dateStr?: string | null): string {
   return `${day}-${month}-${year}`
 }
 
+function formatTimeID(dateStr?: string | null): string {
+  if (!dateStr) return "-"
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return dateStr
+  return d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WIB"
+}
+
 function KioskContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -57,22 +108,27 @@ function KioskContent() {
 
   const [orderNumberInput, setOrderNumberInput] = useState(initialOrderQuery)
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null)
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null)
 
-  // Status penyelesaian tugas di pos
+  // Status Handover
   const [completedStageInfo, setCompletedStageInfo] = useState<{
     stageFinished: string
     nextStage: string
     operatorName: string
   } | null>(null)
 
-  // Info Operator yang sedang login
+  // Info Operator yang login
   const [operatorInfo, setOperatorInfo] = useState<{ name: string; role: string }>({
-    name: "Operator Workshop",
-    role: "OPERATOR"
+    name: "Operator",
+    role: "OPERATOR_PRINT"
   })
+
+  // Fitur Kamera Scanner
+  const [isCameraActive, setIsCameraActive] = useState(false)
+  const scannerRef = useRef<any>(null)
 
   useEffect(() => {
     async function getOperator() {
@@ -87,7 +143,7 @@ function KioskContent() {
         if (profile) {
           setOperatorInfo({
             name: profile.full_name || session.user.email?.split("@")[0] || "Operator",
-            role: (profile.role || "OPERATOR").toUpperCase()
+            role: (profile.role || "OPERATOR_PRINT").toUpperCase()
           })
         }
       }
@@ -101,6 +157,7 @@ function KioskContent() {
     }
   }, [initialOrderQuery])
 
+  // Ambil Data Order & Seluruh Log Riwayat (Audit Trail)
   const handleLookup = async (queryNum?: string) => {
     const target = (queryNum || orderNumberInput).trim()
     if (!target) return
@@ -110,44 +167,113 @@ function KioskContent() {
     setCompletedStageInfo(null)
 
     try {
-      const { data, error } = await supabase
+      const { data: oData, error: oErr } = await supabase
         .from("orders")
         .select("*")
         .eq("order_number", target)
         .single()
 
-      if (error || !data) {
+      if (oErr || !oData) {
         setCurrentOrder(null)
+        setAuditLogs([])
         setMessage({ type: "error", text: `Pesanan "${target}" tidak ditemukan di sistem.` })
       } else {
-        setCurrentOrder(data)
+        setCurrentOrder(oData)
+
+        // Ambil Audit Trail Log
+        const { data: lData } = await supabase
+          .from("production_logs")
+          .select(`
+            id,
+            stage,
+            notes,
+            created_at,
+            profiles (
+              full_name,
+              role
+            )
+          `)
+          .eq("order_id", oData.id)
+          .order("created_at", { ascending: false })
+
+        if (lData) {
+          setAuditLogs(lData as any)
+        }
       }
     } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "Gagal mencari order" })
+      setMessage({ type: "error", text: err.message || "Gagal memuat SPK" })
     } finally {
       setLoading(false)
     }
   }
 
-  // Proses Selesaikan Pekerjaan & Rekam Audit Trail
+  // Toggle Buka / Tutup Kamera HP
+  const toggleCamera = async () => {
+    if (isCameraActive) {
+      if (scannerRef.current) {
+        try {
+          await scannerRef.current.stop()
+        } catch {}
+        scannerRef.current = null
+      }
+      setIsCameraActive(false)
+    } else {
+      setIsCameraActive(true)
+      try {
+        // Dinamic import html5-qrcode
+        const { Html5Qrcode } = await import("html5-qrcode")
+        const qrCodeScanner = new Html5Qrcode("kiosk-qr-reader")
+        scannerRef.current = qrCodeScanner
+
+        await qrCodeScanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          (decodedText) => {
+            // Jika decodedText berupa URL (cth: https://.../kiosk?order=JR-123)
+            let scannedOrder = decodedText
+            try {
+              const url = new URL(decodedText)
+              const orderParam = url.searchParams.get("order")
+              if (orderParam) scannedOrder = orderParam
+            } catch {}
+
+            setOrderNumberInput(scannedOrder)
+            handleLookup(scannedOrder)
+            qrCodeScanner.stop().catch(() => {})
+            setIsCameraActive(false)
+          },
+          () => {}
+        )
+      } catch (err) {
+        console.error("Gagal membuka kamera:", err)
+        setMessage({ type: "error", text: "Tidak dapat mengakses kamera. Pastikan izin kamera aktif di browser Anda." })
+        setIsCameraActive(false)
+      }
+    }
+  }
+
+  // Pengecekan Wewenang (Role Guard)
+  const currentStageConfig = currentOrder ? STAGES_CONFIG[currentOrder.current_status] : null
+  const userHasPermission = currentStageConfig
+    ? currentStageConfig.allowedRoles.includes(operatorInfo.role) ||
+      operatorInfo.role === "OWNER" ||
+      operatorInfo.role === "ADMIN"
+    : false
+
+  // Eksekusi Perpindahan Pos & Catat Audit Trail
   const handleFinishCurrentStage = async () => {
-    if (!currentOrder) return
+    if (!currentOrder || !currentStageConfig || !userHasPermission) return
     setUpdating(true)
     setMessage(null)
 
-    const stageConfig = STAGES.find((s) => s.key === currentOrder.current_status)
-    if (!stageConfig || !stageConfig.next) {
-      setMessage({ type: "info", text: "Pesanan ini sudah mencapai tahap akhir produksi." })
-      setUpdating(false)
-      return
-    }
-
-    const nextStageKey = stageConfig.next
-    const finishedLabel = stageConfig.label
-    const nextLabel = stageConfig.nextLabel
+    const nextStageKey = currentStageConfig.next
+    const finishedLabel = currentStageConfig.label
+    const nextLabel = currentStageConfig.nextLabel
 
     try {
-      // 1. Update status pesanan ke tahap selanjutnya
+      const { data: { session } } = await supabase.auth.getSession()
+
+      // 1. Update status di tabel orders
       const { error: updateErr } = await supabase
         .from("orders")
         .update({
@@ -159,15 +285,15 @@ function KioskContent() {
       if (updateErr) throw updateErr
 
       // 2. Simpan Rekam Jejak Audit Trail (Production Logs)
-      const { data: { session } } = await supabase.auth.getSession()
+      const auditNote = `Tugas pos [${finishedLabel}] diselesaikan oleh ${operatorInfo.name} (${operatorInfo.role}). Diteruskan ke [${nextLabel}].`
       await supabase.from("production_logs").insert({
         order_id: currentOrder.id,
         stage: nextStageKey,
-        notes: `Diselesaikan di pos ${finishedLabel} oleh ${operatorInfo.name} (${operatorInfo.role}) dan diserahkan ke ${nextLabel}.`,
+        notes: auditNote,
         operator_id: session?.user?.id || null
       })
 
-      // 3. Tampilkan Layar Sukses / Handover Feedback (Bukan form lagi!)
+      // 3. Tampilkan Layar Sukses / Handover
       setCompletedStageInfo({
         stageFinished: finishedLabel,
         nextStage: nextLabel,
@@ -176,7 +302,7 @@ function KioskContent() {
 
       setCurrentOrder((prev) => prev ? { ...prev, current_status: nextStageKey } : null)
     } catch (err: any) {
-      setMessage({ type: "error", text: "Gagal memperbarui status: " + err.message })
+      setMessage({ type: "error", text: "Gagal menyimpan: " + err.message })
     } finally {
       setUpdating(false)
     }
@@ -185,30 +311,56 @@ function KioskContent() {
   const handleScanNext = () => {
     setCurrentOrder(null)
     setCompletedStageInfo(null)
+    setAuditLogs([])
     setOrderNumberInput("")
     setMessage(null)
     router.replace("/kiosk")
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 pb-12 pt-2">
-      {/* Header Pos Scanner */}
-      <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs flex items-center justify-between">
+    <div className="max-w-2xl mx-auto space-y-4 pb-16 pt-1">
+      {/* 1. Header Identitas Operator & Pos */}
+      <div className="border border-zinc-200 bg-white p-3 rounded-lg shadow-2xs flex items-center justify-between">
         <div>
-          <h1 className="text-sm font-black text-zinc-900 flex items-center gap-2">
-            <QrCode className="h-4 w-4 text-zinc-800" /> Pos Pemindaian SPK Produksi
+          <h1 className="text-sm font-black text-zinc-900 flex items-center gap-1.5 uppercase tracking-tight">
+            <QrCode className="h-4 w-4 text-zinc-800" /> Pos Scanner SPK Produksi
           </h1>
-          <p className="text-[11px] text-zinc-500">
-            Operator: <strong className="text-zinc-800">{operatorInfo.name}</strong> ({operatorInfo.role})
-          </p>
+          <div className="flex items-center gap-1.5 text-xs text-zinc-600 mt-0.5">
+            <User className="h-3.5 w-3.5 text-zinc-400" />
+            <span>PIC: <strong className="text-zinc-900">{operatorInfo.name}</strong></span>
+            <span className="text-zinc-300">&bull;</span>
+            <span className="font-mono text-[11px] font-bold px-1.5 py-0.2 bg-zinc-100 border border-zinc-200 rounded text-zinc-800">
+              {operatorInfo.role}
+            </span>
+          </div>
         </div>
-        <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Scanner Aktif
-        </span>
+
+        <button
+          type="button"
+          onClick={toggleCamera}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold shadow-2xs transition-colors ${
+            isCameraActive 
+              ? "bg-red-600 hover:bg-red-700 text-white" 
+              : "bg-zinc-900 hover:bg-zinc-800 text-white"
+          }`}
+        >
+          {isCameraActive ? <CameraOff className="h-3.5 w-3.5" /> : <Camera className="h-3.5 w-3.5" />}
+          <span>{isCameraActive ? "Tutup Kamera" : "Scan Kamera"}</span>
+        </button>
       </div>
 
-      {/* Input Pencarian Manual / Scan Barcode Reader */}
-      <div className="border border-zinc-200 bg-white p-3 rounded shadow-2xs">
+      {/* Kotak Tampilan Kamera Scanner */}
+      {isCameraActive && (
+        <div className="border-2 border-zinc-900 bg-black rounded-lg overflow-hidden p-2 space-y-2">
+          <div id="kiosk-qr-reader" className="w-full h-64 bg-zinc-950 flex items-center justify-center text-white text-xs font-mono" />
+          <p className="text-[11px] text-zinc-300 text-center font-mono">
+            Arahkan kamera ke QR Code di pojok kanan atas lembar SPK
+          </p>
+        </div>
+      )}
+
+      {/* Pencarian Manual No Order */}
+      <div className="border border-zinc-200 bg-white p-2.5 rounded shadow-2xs">
         <form
           onSubmit={(e) => {
             e.preventDefault()
@@ -218,17 +370,17 @@ function KioskContent() {
         >
           <input
             type="text"
-            placeholder="Scan QR Code kamera HP atau ketik no order (cth: JR-2610...)"
+            placeholder="Ketik / tempel No. Order (cth: JR-2610...)"
             value={orderNumberInput}
             onChange={(e) => setOrderNumberInput(e.target.value)}
-            className="flex-1 px-3 py-2 border border-zinc-300 rounded text-xs font-mono focus:ring-1 focus:ring-zinc-900 focus:outline-none"
+            className="flex-1 px-3 py-1.5 border border-zinc-300 rounded text-xs font-mono focus:ring-1 focus:ring-zinc-900 focus:outline-none"
           />
           <button
             type="submit"
             disabled={loading}
-            className="bg-zinc-900 hover:bg-zinc-800 text-white px-4 py-2 rounded text-xs font-semibold transition-colors disabled:opacity-50"
+            className="bg-zinc-900 hover:bg-zinc-800 text-white px-4 py-1.5 rounded text-xs font-semibold transition-colors disabled:opacity-50"
           >
-            {loading ? "Mencari..." : "Cari SPK"}
+            {loading ? "Mencari..." : "Buka SPK"}
           </button>
         </form>
       </div>
@@ -244,30 +396,30 @@ function KioskContent() {
         </div>
       )}
 
-      {/* 1. TAMPILAN SUKSES & SERAH TERIMA TUGAS (HANDOVER SCREEN) */}
+      {/* 2. LAYAR KONFIRMASI SUKSES & SERAH TERIMA */}
       {completedStageInfo ? (
-        <div className="border-2 border-emerald-500 bg-emerald-50/60 p-6 rounded-lg shadow-sm text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
-          <div className="h-14 w-14 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto shadow-sm">
+        <div className="border-2 border-emerald-500 bg-emerald-50/70 p-6 rounded-lg shadow-sm text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
+          <div className="h-14 w-14 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto shadow-sm">
             <CheckCheck className="h-8 w-8" />
           </div>
 
           <div className="space-y-1">
-            <h2 className="text-base font-black text-emerald-950 uppercase">
+            <h2 className="text-base font-black text-emerald-950 uppercase tracking-tight">
               Tugas di Pos {completedStageInfo.stageFinished} Telah Selesai!
             </h2>
             <p className="text-xs text-emerald-800">
-              Audit trail berhasil dicatat oleh PIC: <strong>{completedStageInfo.operatorName}</strong>
+              Audit trail pengerjaan telah dicatat oleh: <strong>{completedStageInfo.operatorName}</strong>
             </p>
           </div>
 
           <div className="border border-emerald-200 bg-white p-3.5 rounded text-xs text-zinc-700 space-y-1.5 max-w-md mx-auto">
             <span className="text-[10px] uppercase font-bold text-zinc-400 block tracking-wider">
-              Instruksi Alur Selanjutnya
+              Instruksi Serah Terima
             </span>
             <p className="font-semibold text-zinc-900">
-              Silakan bawa fisik berkas SPK & kain ke pos:
+              Silakan bawa fisik lembar SPK & kain ke pos selanjutnya:
             </p>
-            <div className="inline-block bg-zinc-900 text-white font-black px-3 py-1 rounded text-xs font-mono">
+            <div className="inline-block bg-zinc-900 text-white font-black px-3.5 py-1.5 rounded text-xs font-mono">
               &rarr; {completedStageInfo.nextStage}
             </div>
           </div>
@@ -279,86 +431,132 @@ function KioskContent() {
               className="w-full sm:w-auto px-6 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white font-bold rounded text-xs transition-colors shadow-2xs inline-flex items-center justify-center gap-1.5"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              <span>Pindai SPK Berikutnya</span>
+              <span>Scan SPK Berikutnya</span>
             </button>
           </div>
         </div>
       ) : currentOrder ? (
-        /* 2. TAMPILAN RINCIAN SPK YANG SEDANG DIKERJAKAN */
-        <div className="border border-zinc-200 bg-white rounded-lg shadow-2xs overflow-hidden">
-          {/* Header Kartu SPK */}
-          <div className="bg-zinc-900 text-white p-3.5 flex items-center justify-between">
-            <div>
-              <span className="text-[10px] text-zinc-400 uppercase font-mono tracking-wider block">
-                SURAT PERINTAH KERJA
-              </span>
-              <strong className="text-sm font-mono tracking-wide">{currentOrder.order_number}</strong>
-            </div>
-            <div className="text-right">
+        /* 3. RINCIAN SPK DENGAN ROLE GUARD & AUDIT TRAIL */
+        <div className="space-y-4">
+          <div className="border border-zinc-200 bg-white rounded-lg shadow-2xs overflow-hidden">
+            {/* Header SPK */}
+            <div className="bg-zinc-900 text-white p-3 flex items-center justify-between">
+              <div>
+                <span className="text-[9px] text-zinc-400 uppercase font-mono tracking-wider block">
+                  LEMBAR KERJA PRODUKSI
+                </span>
+                <strong className="text-sm font-mono tracking-wide">{currentOrder.order_number}</strong>
+              </div>
               <span className="border border-white/30 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
                 {currentOrder.priority}
               </span>
             </div>
+
+            {/* Spesifikasi Ringkas */}
+            <div className="p-3.5 space-y-3">
+              <div className="grid grid-cols-2 gap-2.5 text-xs border-b border-zinc-100 pb-3">
+                <div>
+                  <span className="text-zinc-500 block text-[10px]">Nama Pemesan</span>
+                  <strong className="text-zinc-900 uppercase font-bold text-xs">{currentOrder.customer_name}</strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500 block text-[10px]">Target Deadline</span>
+                  <strong className="text-red-700 font-mono text-xs">{formatDateID(currentOrder.deadline_date)}</strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500 block text-[10px]">Bahan & Kerah</span>
+                  <span className="text-zinc-800 font-medium text-xs">{currentOrder.fabric_type} &bull; {currentOrder.collar_type}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-500 block text-[10px]">Total Pesanan</span>
+                  <strong className="font-mono text-zinc-900 font-bold text-xs">{currentOrder.total_qty} PCS</strong>
+                </div>
+              </div>
+
+              {/* Status Pos Saat Ini */}
+              <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50 space-y-1">
+                <span className="text-[9px] uppercase font-bold text-zinc-500 block">Posisi Pengerjaan Saat Ini</span>
+                <div className="flex items-center justify-between">
+                  <span className="font-mono font-bold text-sm text-zinc-900">
+                    {currentStageConfig?.label || currentOrder.current_status}
+                  </span>
+                  <span className="text-[10px] text-zinc-500">
+                    Target berikutnya: <strong className="text-zinc-800">{currentStageConfig?.nextLabel || "Selesai"}</strong>
+                  </span>
+                </div>
+              </div>
+
+              {/* ROLE GUARD VALIDATION */}
+              {userHasPermission ? (
+                /* JIKA ROLE SESUAI DENGAN TUGAS POS */
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    disabled={updating}
+                    onClick={handleFinishCurrentStage}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-md text-xs transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>
+                      {updating
+                        ? "Menyimpan & Menyerahkan..."
+                        : `Selesaikan Tugas Pos ${currentStageConfig?.label || ""} & Teruskan`}
+                    </span>
+                  </button>
+                </div>
+              ) : (
+                /* JIKA ROLE TIDAK BERWENANG MEMINDAHKAN POS INI */
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-amber-900 text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <ShieldAlert className="h-4 w-4 text-amber-700 shrink-0" />
+                    <span>Bukan Wewenang Divisi Anda</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-amber-800">
+                    Pesanan ini saat ini berada di pos <strong>{currentStageConfig?.label}</strong>. Akun Anda adalah <strong>{operatorInfo.role}</strong>. Hanya operator pos terkait atau Admin/Owner yang dapat memindahkan pesanan ini.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Rincian Spesifikasi */}
-          <div className="p-4 space-y-4">
-            <div className="grid grid-cols-2 gap-3 text-xs border-b border-zinc-100 pb-3">
-              <div>
-                <span className="text-zinc-500 block text-[11px]">Nama Pemesan</span>
-                <strong className="text-zinc-900 uppercase font-bold text-xs">{currentOrder.customer_name}</strong>
-              </div>
-              <div>
-                <span className="text-zinc-500 block text-[11px]">Target Deadline</span>
-                <strong className="text-red-700 font-mono text-xs">{formatDateID(currentOrder.deadline_date)}</strong>
-              </div>
-              <div>
-                <span className="text-zinc-500 block text-[11px]">Bahan & Kerah</span>
-                <span className="text-zinc-800 font-medium text-xs">{currentOrder.fabric_type} &bull; {currentOrder.collar_type}</span>
-              </div>
-              <div>
-                <span className="text-zinc-500 block text-[11px]">Jumlah Pesanan</span>
-                <strong className="font-mono text-zinc-900 font-bold text-xs">{currentOrder.total_qty} PCS</strong>
-              </div>
+          {/* 4. AUDIT TRAIL TIMELINE (RIWAYAT LENGKAP YANG BISA DILIHAT SEMUA DIVISI) */}
+          <div className="border border-zinc-200 bg-white rounded-lg p-3.5 shadow-2xs space-y-2.5">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
+              <span className="text-xs font-bold text-zinc-900 flex items-center gap-1.5 uppercase tracking-tight">
+                <History className="h-3.5 w-3.5 text-zinc-600" /> Riwayat Pengerjaan & Audit Trail
+              </span>
+              <span className="text-[10px] font-mono text-zinc-400">
+                {auditLogs.length} Catatan
+              </span>
             </div>
 
-            {/* Jalur Pengerjaan */}
-            {currentOrder.is_makloon && (
-              <div className="bg-purple-50 border border-purple-200 p-2.5 rounded text-xs text-purple-900 flex items-center justify-between">
-                <span>Jalur Jahit Makloon Luar:</span>
-                <strong>{currentOrder.makloon_vendor_name || "Mitra Luar"}</strong>
+            {auditLogs.length === 0 ? (
+              <div className="py-4 text-center text-zinc-400 text-xs font-mono">
+                Belum ada catatan perpindahan pos untuk pesanan ini.
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {auditLogs.map((log) => (
+                  <div key={log.id} className="border-l-2 border-zinc-900 pl-3 py-0.5 space-y-0.5 text-xs">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <strong className="text-zinc-900 font-bold">
+                        {log.profiles?.full_name || "Staf Workshop"} 
+                        <span className="text-zinc-400 font-normal font-mono ml-1">
+                          ({log.profiles?.role || "PIC"})
+                        </span>
+                      </strong>
+                      <span className="font-mono text-[10px] text-zinc-500 flex items-center gap-1">
+                        <Clock className="h-3 w-3 text-zinc-400" />
+                        {formatDateID(log.created_at)} &bull; {formatTimeID(log.created_at)}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-600 leading-snug">
+                      {log.notes}
+                    </p>
+                  </div>
+                ))}
               </div>
             )}
-
-            {/* Status Saat Ini */}
-            <div className="border border-zinc-200 rounded p-3 bg-zinc-50 space-y-1">
-              <span className="text-[10px] uppercase font-bold text-zinc-500 block">Posisi Pengerjaan Saat Ini</span>
-              <div className="flex items-center justify-between">
-                <span className="font-mono font-bold text-sm text-zinc-900">
-                  {STAGES.find((s) => s.key === currentOrder.current_status)?.label || currentOrder.current_status}
-                </span>
-                <span className="text-[10px] font-medium text-zinc-500">
-                  Target berikutnya: <strong>{STAGES.find((s) => s.key === currentOrder.current_status)?.nextLabel || "Selesai"}</strong>
-                </span>
-              </div>
-            </div>
-
-            {/* TOMBOL PENYELESAIAN TUGAS POS */}
-            <div className="pt-2">
-              <button
-                type="button"
-                disabled={updating}
-                onClick={handleFinishCurrentStage}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-md text-xs transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                <span>
-                  {updating
-                    ? "Menyimpan Catatan & Menyerahkan..."
-                    : `Selesaikan Tugas di Pos ${STAGES.find((s) => s.key === currentOrder.current_status)?.label || ""} & Teruskan`}
-                </span>
-              </button>
-            </div>
           </div>
         </div>
       ) : null}
