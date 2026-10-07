@@ -288,7 +288,7 @@ export default function KanbanDashboard() {
                               {order.order_number}
                             </div>
                             <Link
-                              href={`/orders/${order.id}/print`}
+                              href={`/orders/${order.id}/spk`}
                               target="_blank"
                               title="Cetak Lembar SPK"
                               className="p-1 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded transition-colors"

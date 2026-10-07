@@ -357,7 +357,7 @@ export default function SPKPrintPage() {
           </div>
 
           <div className="border border-black p-1.5 rounded flex flex-col justify-between">
-            <div className="font-extrabold uppercase leading-tight">2. Press Transfer</div>
+            <div className="font-extrabold uppercase leading-tight">2. Print Sublim</div>
             <div className="my-1 border-b border-dashed border-zinc-400">
               <span className="text-[7.5px] text-zinc-400 block text-left">Nama PIC:</span>
               <div className="h-3"></div>
@@ -366,7 +366,7 @@ export default function SPKPrintPage() {
           </div>
 
           <div className="border border-black p-1.5 rounded flex flex-col justify-between">
-            <div className="font-extrabold uppercase leading-tight">3. Cutting Pola</div>
+            <div className="font-extrabold uppercase leading-tight">3. Potong & Press</div>
             <div className="my-1 border-b border-dashed border-zinc-400">
               <span className="text-[7.5px] text-zinc-400 block text-left">Nama PIC:</span>
               <div className="h-3"></div>
@@ -388,7 +388,7 @@ export default function SPKPrintPage() {
           <div className="border border-black p-1.5 rounded flex flex-col justify-between">
             <div className="font-extrabold uppercase leading-tight">5. QC & Packing</div>
             <div className="my-1 border-b border-dashed border-zinc-400">
-              <span className="text-[7.5px] text-zinc-400 block text-left">Nama Mandor:</span>
+              <span className="text-[7.5px] text-zinc-400 block text-left">Nama PIC:</span>
               <div className="h-3"></div>
             </div>
             <div className="text-[8px] text-zinc-600 font-medium">Paraf / Tgl</div>
