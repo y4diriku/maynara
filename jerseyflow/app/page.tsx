@@ -47,8 +47,8 @@ function formatDateID(dateStr?: string | null): string {
 
 const STAGES = [
   { key: "DESIGN_QUEUE", label: "Antrean Desain", code: "01", accent: "bg-blue-600" },
-  { key: "PRINTING", label: "Cetak & Sublim", code: "02", accent: "bg-indigo-600" },
-  { key: "CUTTING", label: "Cutting Pola", code: "03", accent: "bg-amber-600" },
+  { key: "PRINTING", label: "Print Sublim", code: "02", accent: "bg-indigo-600" },
+  { key: "CUTTING", label: "Potong & Press", code: "03", accent: "bg-amber-600" },
   { key: "SEWING", label: "Lini Jahit", code: "04", accent: "bg-emerald-600" },
   { key: "QC_PACKING", label: "QC & Packing", code: "05", accent: "bg-violet-600" },
   { key: "READY_FOR_DELIVERY", label: "Siap Ambil", code: "06", accent: "bg-zinc-900" },
@@ -283,8 +283,18 @@ export default function KanbanDashboard() {
                       >
                         {/* 1. Header Card 2 Baris */}
                         <div className="space-y-1 border-b border-zinc-100 pb-1.5">
-                          <div className="text-[11px] font-mono font-black text-zinc-900 tracking-tight truncate">
-                            {order.order_number}
+                          <div className="flex items-center justify-between">
+                            <div className="text-[11px] font-mono font-black text-zinc-900 tracking-tight truncate">
+                              {order.order_number}
+                            </div>
+                            <Link
+                              href={`/orders/${order.id}/print`}
+                              target="_blank"
+                              title="Cetak Lembar SPK"
+                              className="p-1 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded transition-colors"
+                            >
+                              <Printer className="h-3.5 w-3.5" />
+                            </Link>
                           </div>
 
                           <div className="flex items-center justify-between gap-1 text-[10px]">
@@ -328,33 +338,29 @@ export default function KanbanDashboard() {
                               className="flex items-center gap-1 text-[11px] text-blue-700 hover:underline font-bold"
                             >
                               <Palette className="h-3 w-3 shrink-0" />
-                              <span className="truncate">Mockup & Roster</span>
+                              <span className="truncate">Mulai Desain</span>
                             </Link>
                             <div className="text-[9px] flex items-center justify-between text-zinc-500 border-t border-zinc-200/60 pt-0.5">
                               <span>Status:</span>
                               <strong className={order.mockup_url ? "text-emerald-700" : "text-amber-700"}>
-                                {order.mockup_url ? "Siap Cetak" : "Butuh Desain"}
+                                {order.mockup_url ? "Siap Cetak" : "Menunggu File"}
                               </strong>
                             </div>
                           </div>
                         )}
 
                         {col.key === "PRINTING" && (
-                          <div className="bg-zinc-50 border border-zinc-200 rounded p-1.5 space-y-1">
-                            <Link
-                              href={`/orders/${order.id}/spk`}
-                              target="_blank"
-                              className="flex items-center gap-1 text-[11px] text-indigo-700 hover:underline font-bold"
-                            >
-                              <Printer className="h-3 w-3 shrink-0" />
-                              <span className="truncate">Cetak Lembar SPK</span>
-                            </Link>
-                            <div className="text-[9px] flex items-center justify-between text-zinc-500 border-t border-zinc-200/60 pt-0.5">
-                              <span>Media:</span>
-                              <span className="font-mono text-zinc-700">Kertas Sublim</span>
+                            <div className="bg-zinc-50 border border-zinc-200 rounded p-1.5 space-y-1">
+                              <div className="text-[10px] flex items-center justify-between text-zinc-600">
+                                <span>Proses:</span>
+                                <strong className="font-semibold text-zinc-800">Print & Press</strong>
+                              </div>
+                              <div className="text-[9px] flex items-center justify-between text-zinc-500 border-t border-zinc-200/60 pt-0.5">
+                                <span>Media:</span>
+                                <span className="font-mono text-indigo-700 font-medium">Kertas Sublimasi</span>
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
 
                         {col.key === "CUTTING" && (
                           <div className="bg-zinc-50 border border-zinc-200 rounded p-1.5 space-y-1">

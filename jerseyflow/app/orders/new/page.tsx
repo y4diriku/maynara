@@ -51,6 +51,8 @@ function parseRibuan(str: string): number {
 export default function NewOrderPage() {
   const router = useRouter()
   const [submitting, setSubmitting] = useState(false)
+  const [catatanDesain, setCatatanDesain] = useState("")
+  const [linkDriveAset, setLinkDriveAset] = useState("")
   const [errorMsg, setErrorMsg] = useState("")
 
   const [customerName, setCustomerName] = useState("")
@@ -173,7 +175,9 @@ export default function NewOrderPage() {
           collar_type: collarType,
           deadline_date: deadlineDate,
           priority: priority,
-          total_qty: totalQty,
+          catatan_desain: catatanDesain.trim(),
+        link_drive_aset: linkDriveAset.trim(),
+        total_qty: totalQty,
           total_price: totalPrice,
           down_payment: downPayment,
           is_paid_off: isPaid,
@@ -592,7 +596,43 @@ export default function NewOrderPage() {
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 pt-2">
+                    {/* Brief Desain & Link Aset (Opsional untuk Bagian Setting) */}
+            <div className="border border-purple-200 bg-purple-50/40 p-3 rounded-lg space-y-3">
+              <span className="text-[11px] font-bold text-purple-950 uppercase tracking-tight block">
+                Instruksi Operator Desain & Setting (Opsional)
+              </span>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-zinc-700 mb-1">
+                  Catatan Brief Desain
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Contoh: Gradasi biru-hitam, motif petir halus di pundak, kerah V-neck rib hitam list emas..."
+                  value={catatanDesain}
+                  onChange={(e) => setCatatanDesain(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-zinc-300 rounded text-xs focus:ring-1 focus:ring-purple-900 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-zinc-700 mb-1">
+                  Link Aset Logo / Folder Desain
+                </label>
+                <input
+                  type="text"
+                  placeholder="Contoh: https://drive.google.com/... atau \\SERVER\Desain\Garuda_FC"
+                  value={linkDriveAset}
+                  onChange={(e) => setLinkDriveAset(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-zinc-300 rounded text-xs font-mono focus:ring-1 focus:ring-purple-900 focus:outline-none"
+                />
+                <span className="text-[10px] text-zinc-500 mt-0.5 block">
+                  Bisa berupa link Google Drive atau alamat path folder lokal di jaringan workshop.
+                </span>
+              </div>
+            </div>
+
+<div className="flex justify-end gap-3 pt-2">
           <Link
             href="/orders"
             className="px-4 py-2 text-xs font-medium border border-zinc-300 rounded hover:bg-zinc-100 text-zinc-700 transition-colors"

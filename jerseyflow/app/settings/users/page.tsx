@@ -13,7 +13,20 @@ interface ProfileItem {
   created_at: string
 }
 
-const ROLES = ["ADMIN", "OPERATOR", "DESIGNER", "OPERATOR_PRINT", "SEWING_SUPERVISOR", "QC", "OWNER"]
+const ROLE_LABELS: { [key: string]: string } = {
+  OWNER: "Owner",
+  ADMIN: "Admin Workshop",
+  OPERATOR_DESIGN: "Operator Desain & Setting",
+  DESIGNER: "Operator Desain & Setting",
+  OPERATOR_PRINT: "Operator Print",
+  OPERATOR_PRESS: "Operator Press",
+  OPERATOR_CUTTING: "Operator Cutting",
+  OPERATOR_SEWING: "Operator Jahit",
+  SEWING_SUPERVISOR: "Supervisor Jahit",
+  QC: "Quality Control",
+  OPERATOR_PACKING: "Operator Finishing & Packing",
+  OPERATOR: "Operator Produksi"
+}
 
 export default function UserManagementPage() {
   const router = useRouter()
@@ -26,7 +39,7 @@ export default function UserManagementPage() {
   const [fullName, setFullName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [role, setRole] = useState("OPERATOR")
+  const [role, setRole] = useState("ADMIN")
 
   // Modal Reset Password State
   const [resetModalUser, setResetModalUser] = useState<ProfileItem | null>(null)
@@ -215,14 +228,33 @@ export default function UserManagementPage() {
             </div>
             <div>
               <label className="block text-zinc-600 font-medium mb-1">Peran / Hak Akses</label>
-              <select
+                                          <select
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
-                className="w-full px-2 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white font-mono"
+                className="w-full border border-zinc-300 rounded px-3 py-2 text-xs focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white font-medium text-zinc-800"
               >
-                {ROLES.map((r) => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
+                <optgroup label="Manajemen & Kantor">
+                  <option value="OWNER">Owner</option>
+                  <option value="ADMIN">Admin Workshop</option>
+                </optgroup>
+                <optgroup label="Pos 1: Desain & Setting">
+                  <option value="OPERATOR_DESIGN">Operator Desain & Setting</option>
+                </optgroup>
+                <optgroup label="Pos 2: Cetak & Sublimasi">
+                  <option value="OPERATOR_PRINT">Operator Print</option>
+                  <option value="OPERATOR_PRESS">Operator Press</option>
+                </optgroup>
+                <optgroup label="Pos 3: Potong Kain">
+                  <option value="OPERATOR_CUTTING">Operator Cutting</option>
+                </optgroup>
+                <optgroup label="Pos 4: Lini Jahit">
+                  <option value="OPERATOR_SEWING">Operator Jahit</option>
+                  <option value="SEWING_SUPERVISOR">Supervisor Jahit</option>
+                </optgroup>
+                <optgroup label="Pos 5: QC & Finishing">
+                  <option value="QC">Quality Control</option>
+                  <option value="OPERATOR_PACKING">Operator Finishing & Packing</option>
+                </optgroup>
               </select>
             </div>
             <button
@@ -261,7 +293,7 @@ export default function UserManagementPage() {
                       <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
                         p.role === "OWNER" ? "bg-amber-50 text-amber-800 border-amber-300" : "bg-zinc-100 text-zinc-800 border-zinc-300"
                       }`}>
-                        {p.role}
+                        {ROLE_LABELS[p.role] || p.role}
                       </span>
                     </td>
                     <td className="py-2.5 px-3 text-zinc-500 font-mono text-[11px]">
