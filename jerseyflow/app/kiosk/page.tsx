@@ -54,8 +54,8 @@ const STAGES_CONFIG: {
     label: "Antrean Desain",
     next: "PRINTING",
     nextLabel: "Cetak & Sublim",
-    // Hanya Designer, Admin, atau Owner yang boleh menyelesaikan tahap desain
-    allowedRoles: ["OWNER", "ADMIN", "DESIGNER"],
+    // Owner, Admin, serta Operator Desain & Setting Pola
+    allowedRoles: ["OWNER", "ADMIN", "OPERATOR_DESIGN", "DESIGNER"],
     handoverItem: "file cetak & lembar SPK",
     logMessage: () => "File desain & layout pola selesai disiapkan. SPK diteruskan ke pos Cetak & Sublim."
   },
@@ -63,7 +63,8 @@ const STAGES_CONFIG: {
     label: "Cetak & Sublim",
     next: "CUTTING",
     nextLabel: "Cutting Pola",
-    allowedRoles: ["OWNER", "ADMIN", "OPERATOR_PRINT"],
+    // Owner, Admin, Operator Print Sublim, dan Operator Press Rotary
+    allowedRoles: ["OWNER", "ADMIN", "OPERATOR_PRINT", "OPERATOR_PRESS"],
     handoverItem: "kain hasil press sublim & lembar SPK",
     logMessage: () => "Proses cetak kertas sublim & press transfer kain selesai. Gulungan kain & SPK diserahkan ke pos Cutting Pola."
   },
@@ -71,6 +72,7 @@ const STAGES_CONFIG: {
     label: "Cutting Pola",
     next: "SEWING",
     nextLabel: "Lini Jahit",
+    // Owner, Admin, dan Operator Potong Pola
     allowedRoles: ["OWNER", "ADMIN", "OPERATOR_CUTTING"],
     handoverItem: "potongan kain pola & lembar SPK",
     logMessage: (isMakloon, vendor) => isMakloon
@@ -81,6 +83,7 @@ const STAGES_CONFIG: {
     label: "Lini Jahit",
     next: "QC_PACKING",
     nextLabel: "QC & Packing",
+    // Owner, Admin, Mandor Jahit, dan Penjahit
     allowedRoles: ["OWNER", "ADMIN", "SEWING_SUPERVISOR", "OPERATOR_SEWING"],
     handoverItem: "jersey jadi & lembar SPK",
     logMessage: (isMakloon, vendor) => isMakloon
@@ -91,6 +94,7 @@ const STAGES_CONFIG: {
     label: "QC & Packing",
     next: "READY_FOR_DELIVERY",
     nextLabel: "Siap Diambil",
+    // Owner, Admin, Quality Control, dan Operator Finishing Packing
     allowedRoles: ["OWNER", "ADMIN", "QC", "OPERATOR_PACKING"],
     handoverItem: "paket jersey rapi & nota",
     logMessage: () => "Pemeriksaan jahitan (QC), buang benang, dan packing plastik selesai. Pesanan siap diambil/dikirim."

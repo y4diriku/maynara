@@ -16,6 +16,21 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 
+const ROLE_LABELS: { [key: string]: { label: string; color: string } } = {
+  OWNER: { label: "Owner (Pemilik Workshop)", color: "bg-red-50 text-red-800 border-red-200" },
+  ADMIN: { label: "Admin Workshop (Kasir & CS)", color: "bg-blue-50 text-blue-800 border-blue-200" },
+  OPERATOR_DESIGN: { label: "Operator Desain & Setting Pola", color: "bg-purple-50 text-purple-800 border-purple-200" },
+  DESIGNER: { label: "Operator Desain & Setting Pola", color: "bg-purple-50 text-purple-800 border-purple-200" },
+  OPERATOR_PRINT: { label: "Operator Print (Kertas Sublim)", color: "bg-indigo-50 text-indigo-800 border-indigo-200" },
+  OPERATOR_PRESS: { label: "Operator Press (Kalender / Rotary)", color: "bg-orange-50 text-orange-800 border-orange-200" },
+  OPERATOR_CUTTING: { label: "Operator Cutting (Potong Pola)", color: "bg-amber-50 text-amber-800 border-amber-200" },
+  OPERATOR_SEWING: { label: "Operator Jahit (Lini Produksi)", color: "bg-teal-50 text-teal-800 border-teal-200" },
+  SEWING_SUPERVISOR: { label: "Mandor / Supervisor Jahit", color: "bg-emerald-50 text-emerald-800 border-emerald-200" },
+  QC: { label: "Quality Control (Inspeksi Jahitan)", color: "bg-rose-50 text-rose-800 border-rose-200" },
+  OPERATOR_PACKING: { label: "Operator Finishing & Packing", color: "bg-cyan-50 text-cyan-800 border-cyan-200" },
+  OPERATOR: { label: "Operator Produksi", color: "bg-zinc-100 text-zinc-800 border-zinc-200" }
+}
+
 export default function SettingsPage() {
   const router = useRouter()
   const [authorized, setAuthorized] = useState(false)
