@@ -8,7 +8,6 @@ import Link from "next/link"
 import { 
   ArrowLeft, 
   Save, 
-  Plus, 
   Trash2, 
   Shirt, 
   User, 
@@ -19,23 +18,24 @@ import {
   ImageIcon, 
   FileText, 
   X, 
-  PieChart, 
-  Users2 
+  Users2,
+  Check,
+  CheckCircle2,
+  Clock
 } from "lucide-react"
-
-interface RosterItem {
-  id?: string
-  player_name: string
-  back_number: string
-  size: string
-  sleeve_type: "SHORT" | "LONG"
-  notes: string
-}
 
 interface PartnerItem {
   id: string
   name: string
 }
+
+interface SizeRow {
+  pendek: number
+  panjang: number
+  celana: number
+}
+
+type SizeMatrix = Record<string, SizeRow>
 
 const FABRIC_OPTIONS = [
   "Dryfit Milano",
@@ -54,7 +54,19 @@ const COLLAR_OPTIONS = [
   "Kerah Mandarin / Sanghai"
 ]
 
-const SIZE_OPTIONS = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "Anak (S-XL)"]
+const ADULT_SIZES = ["S", "M", "L", "XL", "2XL", "3XL"]
+const KID_SIZES = ["S Anak", "M Anak", "L Anak", "XL Anak"]
+
+const STAGES = [
+  { key: "DESIGN_QUEUE", label: "Desain", code: "01", accent: "bg-blue-600" },
+  { key: "PRINTING", label: "Print Sublim", code: "02", accent: "bg-indigo-600" },
+  { key: "CUTTING", label: "Potong Kain", code: "03", accent: "bg-amber-600" },
+  { key: "HEAT_PRESS", label: "Press Kain", code: "04", accent: "bg-rose-600" },
+  { key: "PATTERN_CUTTING", label: "Potong Pola", code: "05", accent: "bg-teal-600" },
+  { key: "SEWING", label: "Lini Jahit", code: "06", accent: "bg-emerald-600" },
+  { key: "QC_PACKING", label: "QC & Pack", code: "07", accent: "bg-violet-600" },
+  { key: "READY_FOR_DELIVERY", label: "Siap Ambil", code: "08", accent: "bg-zinc-900" },
+]
 
 function formatRibuan(num: number): string {
   if (!num || isNaN(num)) return ""
@@ -74,32 +86,66 @@ export default function OrderDetailPage() {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState("")
 
+  // Identitas & Status
   const [orderNumber, setOrderNumber] = useState("")
+  const [orderTitle, setOrderTitle] = useState("")
   const [customerName, setCustomerName] = useState("")
-  const [customerPhone, setCustomerPhone] = useState("")
+  const [currentStatus, setCurrentStatus] = useState("")
+  const [priority, setPriority] = useState("NORMAL")
+
+  // Parameter Spesifikasi, Paket, Tinta, Tipe & Lokasi
   const [fabricType, setFabricType] = useState("")
   const [collarType, setCollarType] = useState("")
   const [deadlineDate, setDeadlineDate] = useState("")
-  const [priority, setPriority] = useState("NORMAL")
+  const [packageType, setPackageType] = useState<"ATASAN" | "STELAN">("ATASAN")
+  const [inkType, setInkType] = useState<"ORI" | "CINA">("ORI")
+  const [orderType, setOrderType] = useState<"FULL_ORDER" | "PRINT_PRESS">("FULL_ORDER")
+  const [designLocation, setDesignLocation] = useState<"DISINI" | "LUAR">("DISINI")
+  const [cuttingLocation, setCuttingLocation] = useState<"DISINI" | "LUAR">("DISINI")
 
-  // Volume & Biaya
+  // Matriks Ukuran
+  const [adultMatrix, setAdultMatrix] = useState<SizeMatrix>(() => {
+    const init: SizeMatrix = {}
+    ADULT_SIZES.forEach((sz) => { init[sz] = { pendek: 0, panjang: 0, celana: 0 } })
+    return init
+  })
+
+  const [kidMatrix, setKidMatrix] = useState<SizeMatrix>(() => {
+    const init: SizeMatrix = {}
+    KID_SIZES.forEach((sz) => { init[sz] = { pendek: 0, panjang: 0, celana: 0 } })
+    return init
+  })
+
+  // Wadah Roster WA & 2 Screenshot
+  const [rosterWaText, setRosterWaText] = useState("")
+  const [rosterScreenshotUrl, setRosterScreenshotUrl] = useState<string | null>(null)
+  const [rosterScreenshotUrl2, setRosterScreenshotUrl2] = useState<string | null>(null)
+  const [uploadingScreenshot, setUploadingScreenshot] = useState(false)
+  const [uploadingScreenshot2, setUploadingScreenshot2] = useState(false)
+
+  // Biaya
+  const [priceAdult, setPriceAdult] = useState<number>(0)
+  const [priceKid, setPriceKid] = useState<number>(0)
+  const [pricePants, setPricePants] = useState<number>(0)
+  const [feeLongSleeve, setFeeLongSleeve] = useState<number>(0)
+  const [feeJumbo, setFeeJumbo] = useState<number>(0)
+  
+  const [discountAmount, setDiscountAmount] = useState<number>(0)
   const [totalPrice, setTotalPrice] = useState(0)
   const [downPayment, setDownPayment] = useState(0)
-  const [currentStatus, setCurrentStatus] = useState("")
   const [productionNotes, setProductionNotes] = useState("")
 
-  // Pilihan Pelaksana Jahit & Partner Makloon
+  // Makloon
   const [isMakloon, setIsMakloon] = useState(false)
   const [makloonVendorName, setMakloonVendorName] = useState("")
   const [partnerList, setPartnerList] = useState<PartnerItem[]>([])
   const [loadingPartners, setLoadingPartners] = useState(false)
 
+  // Mockup Gambar
   const [mockupUrl1, setMockupUrl1] = useState<string | null>(null)
   const [mockupUrl2, setMockupUrl2] = useState<string | null>(null)
   const [mockupUrl3, setMockupUrl3] = useState<string | null>(null)
   const [uploadingSlot, setUploadingSlot] = useState<number | null>(null)
-
-  const [roster, setRoster] = useState<RosterItem[]>([])
 
   useEffect(() => {
     async function loadData() {
@@ -119,14 +165,28 @@ export default function OrderDetailPage() {
       }
 
       setOrderNumber(oData.order_number)
+      setOrderTitle(oData.order_title || "")
       setCustomerName(oData.customer_name)
-      setCustomerPhone(oData.customer_phone)
-      setFabricType(oData.fabric_type)
-      setCollarType(oData.collar_type)
+      setFabricType(oData.fabric_type || FABRIC_OPTIONS[0])
+      setCollarType(oData.collar_type || COLLAR_OPTIONS[0])
       setDeadlineDate(oData.deadline_date)
       setPriority(oData.priority || "NORMAL")
+      setPackageType((oData.package_type as any) || "ATASAN")
+      setInkType((oData.ink_type as any) || "ORI")
+      setOrderType((oData.order_type as any) || "FULL_ORDER")
+      setDesignLocation((oData.design_location as any) || "DISINI")
+      setCuttingLocation((oData.cutting_location as any) || "DISINI")
+
       setTotalPrice(Number(oData.total_price) || 0)
       setDownPayment(Number(oData.down_payment) || 0)
+      if (oData.pricing_config) {
+        setPriceAdult(Number(oData.pricing_config.priceAdult || 0))
+        setPriceKid(Number(oData.pricing_config.priceKid || 0))
+        setPricePants(Number(oData.pricing_config.pricePants || 0))
+        setFeeLongSleeve(Number(oData.pricing_config.feeLongSleeve || 0))
+        setFeeJumbo(Number(oData.pricing_config.feeJumbo || 0))
+        setDiscountAmount(Number(oData.pricing_config.discountAmount || 0))
+      }
       setCurrentStatus(oData.current_status)
       setProductionNotes(oData.production_notes || "")
       setIsMakloon(Boolean(oData.is_makloon))
@@ -134,6 +194,28 @@ export default function OrderDetailPage() {
       setMockupUrl1(oData.mockup_url || null)
       setMockupUrl2(oData.mockup_url_2 || null)
       setMockupUrl3(oData.mockup_url_3 || null)
+      setRosterWaText(oData.roster_wa_text || "")
+      setRosterScreenshotUrl(oData.roster_screenshot_url || null)
+      setRosterScreenshotUrl2(oData.roster_screenshot_url_2 || null)
+
+      // Memuat Matriks Ukuran dari JSONB
+      if (oData.size_breakdown && typeof oData.size_breakdown === "object") {
+        const bd = oData.size_breakdown
+        if (bd.adult) {
+          setAdultMatrix((prev) => {
+            const next = { ...prev }
+            ADULT_SIZES.forEach((sz) => { if (bd.adult[sz]) next[sz] = bd.adult[sz] })
+            return next
+          })
+        }
+        if (bd.kid) {
+          setKidMatrix((prev) => {
+            const next = { ...prev }
+            KID_SIZES.forEach((sz) => { if (bd.kid[sz]) next[sz] = bd.kid[sz] })
+            return next
+          })
+        }
+      }
 
       setLoadingPartners(true)
       const { data: pData } = await supabase
@@ -148,54 +230,135 @@ export default function OrderDetailPage() {
         })))
       }
       setLoadingPartners(false)
-
-      const { data: rData } = await supabase
-        .from("order_roster_items")
-        .select("*")
-        .eq("order_id", orderId)
-
-      if (rData) {
-        setRoster(rData.map((r: any) => ({
-          id: r.id,
-          player_name: r.player_name,
-          back_number: r.back_number,
-          size: r.size,
-          sleeve_type: r.sleeve_type,
-          notes: r.notes || "",
-        })))
-      }
-
       setLoading(false)
     }
 
     loadData()
   }, [orderId])
 
-  const sizeSummary = useMemo(() => {
-    const summary: { [key: string]: number } = {}
-    roster.forEach((item) => {
-      const sz = item.size || "L"
-      summary[sz] = (summary[sz] || 0) + 1
+  const matrixTotals = useMemo(() => {
+    let adultPendek = 0, adultPanjang = 0, adultCelana = 0
+    ADULT_SIZES.forEach((sz) => {
+      adultPendek += Number(adultMatrix[sz]?.pendek || 0)
+      adultPanjang += Number(adultMatrix[sz]?.panjang || 0)
+      adultCelana += Number(adultMatrix[sz]?.celana || 0)
     })
-    return Object.entries(summary).sort((a, b) => b[1] - a[1])
-  }, [roster])
+    const adultBaju = adultPendek + adultPanjang
 
-  // Menyesuaikan total baris dari input jumlah pcs di atas
-  const handleQtyChange = (newQty: number) => {
-    if (newQty > 0 && newQty <= 100) {
-      if (newQty > roster.length) {
-        const extraRows = Array.from({ length: newQty - roster.length }, () => ({
-          player_name: "",
-          back_number: "",
-          size: "L",
-          sleeve_type: "SHORT" as const,
-          notes: ""
-        }))
-        setRoster([...roster, ...extraRows])
-      } else if (newQty < roster.length) {
-        setRoster(roster.slice(0, newQty))
-      }
+    let kidPendek = 0, kidPanjang = 0, kidCelana = 0
+    KID_SIZES.forEach((sz) => {
+      kidPendek += Number(kidMatrix[sz]?.pendek || 0)
+      kidPanjang += Number(kidMatrix[sz]?.panjang || 0)
+      kidCelana += Number(kidMatrix[sz]?.celana || 0)
+    })
+    const kidBaju = kidPendek + kidPanjang
+
+    const grandTotalBaju = adultBaju + kidBaju
+    const grandTotalCelana = adultCelana + kidCelana
+    const totalOrderQty = grandTotalBaju > 0 ? grandTotalBaju : grandTotalCelana
+
+    return {
+      adultPendek, adultPanjang, adultCelana, adultBaju,
+      kidPendek, kidPanjang, kidCelana, kidBaju,
+      grandTotalBaju, grandTotalCelana, totalOrderQty
     }
+  }, [adultMatrix, kidMatrix])
+
+    const calculatedTotalPrice = useMemo(() => {
+    let subtotal = 0
+    ADULT_SIZES.forEach((sz) => {
+      const isJumbo = sz === "2XL" || sz === "3XL" || sz === "4XL"
+      const jumboSurcharge = isJumbo ? feeJumbo : 0
+      const p = Number(adultMatrix[sz]?.pendek || 0)
+      const pj = Number(adultMatrix[sz]?.panjang || 0)
+      const c = Number(adultMatrix[sz]?.celana || 0)
+      subtotal += p * (priceAdult + jumboSurcharge)
+      subtotal += pj * (priceAdult + jumboSurcharge + feeLongSleeve)
+      if (packageType === "STELAN") subtotal += c * pricePants
+    })
+    KID_SIZES.forEach((sz) => {
+      const p = Number(kidMatrix[sz]?.pendek || 0)
+      const pj = Number(kidMatrix[sz]?.panjang || 0)
+      const c = Number(kidMatrix[sz]?.celana || 0)
+      subtotal += p * priceKid
+      subtotal += pj * (priceKid + feeLongSleeve)
+      if (packageType === "STELAN") subtotal += c * pricePants
+    })
+    const finalCalc = subtotal - discountAmount
+    return finalCalc > 0 ? finalCalc : 0
+  }, [adultMatrix, kidMatrix, priceAdult, priceKid, pricePants, feeLongSleeve, feeJumbo, packageType, discountAmount])
+
+  useEffect(() => { setTotalPrice(calculatedTotalPrice) }, [calculatedTotalPrice])
+
+  const sisaPiutang = useMemo(() => {
+    const sisa = totalPrice - downPayment
+    return sisa > 0 ? sisa : 0
+  }, [totalPrice, downPayment])
+
+  const activeStageIndex = useMemo(() => {
+    if (currentStatus === "COMPLETED") return 8
+    return STAGES.findIndex((s) => s.key === currentStatus)
+  }, [currentStatus])
+
+  const handleAdultChange = (sz: string, field: keyof SizeRow, val: number) => {
+    setAdultMatrix((prev) => ({
+      ...prev,
+      [sz]: { ...prev[sz], [field]: val >= 0 ? val : 0 }
+    }))
+  }
+
+  const handleKidChange = (sz: string, field: keyof SizeRow, val: number) => {
+    setKidMatrix((prev) => ({
+      ...prev,
+      [sz]: { ...prev[sz], [field]: val >= 0 ? val : 0 }
+    }))
+  }
+
+  const handleUploadScreenshot = async (e: React.ChangeEvent<HTMLInputElement>, slot: 1 | 2) => {
+    const file = e.target.files?.[0]
+    if (!file || !orderId) return
+
+    if (slot === 1) setUploadingScreenshot(true)
+    else setUploadingScreenshot2(true)
+
+    try {
+      const compressedBlob = await compressImage(file, 1600, 0.8)
+      const fileName = `roster-ss-${slot}-${orderId}.webp`
+
+      const { error: uploadError } = await supabase.storage
+        .from("order-mockups")
+        .upload(fileName, compressedBlob, {
+          contentType: "image/webp",
+          upsert: true
+        })
+
+      if (uploadError) throw uploadError
+
+      const { data: publicUrlData } = supabase.storage
+        .from("order-mockups")
+        .getPublicUrl(fileName)
+
+      const freshUrl = `${publicUrlData.publicUrl}?t=${Date.now()}`
+      const colKey = slot === 1 ? "roster_screenshot_url" : "roster_screenshot_url_2"
+      await supabase.from("orders").update({ [colKey]: freshUrl }).eq("id", orderId)
+
+      if (slot === 1) setRosterScreenshotUrl(freshUrl)
+      else setRosterScreenshotUrl2(freshUrl)
+
+      setMsg(`Screenshot ${slot} berhasil diperbarui!`)
+    } catch (err: any) {
+      alert("Gagal mengunggah screenshot: " + err.message)
+    } finally {
+      if (slot === 1) setUploadingScreenshot(false)
+      else setUploadingScreenshot2(false)
+    }
+  }
+
+  const handleDeleteScreenshot = async (slot: 1 | 2) => {
+    const colKey = slot === 1 ? "roster_screenshot_url" : "roster_screenshot_url_2"
+    await supabase.from("orders").update({ [colKey]: null }).eq("id", orderId)
+    if (slot === 1) setRosterScreenshotUrl(null)
+    else setRosterScreenshotUrl2(null)
   }
 
   const handleUploadMockup = async (e: React.ChangeEvent<HTMLInputElement>, slot: 1 | 2 | 3) => {
@@ -247,47 +410,41 @@ export default function OrderDetailPage() {
     else setMockupUrl3(null)
   }
 
-  const handleAddRow = () => {
-    setRoster([
-      ...roster,
-      { player_name: "", back_number: "", size: "L", sleeve_type: "SHORT", notes: "" }
-    ])
-  }
-
-  const handleRemoveRow = (idx: number) => {
-    if (roster.length <= 1) return
-    setRoster(roster.filter((_, i) => i !== idx))
-  }
-
-  const handleRosterChange = (idx: number, field: keyof RosterItem, val: string) => {
-    const updated = [...roster]
-    updated[idx] = { ...updated[idx], [field]: val }
-    setRoster(updated)
-  }
-
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
     setMsg("")
 
     try {
-      const totalQty = roster.length
       const isPaid = downPayment >= totalPrice
 
       const { error: oErr } = await supabase
         .from("orders")
         .update({
-          customer_name: customerName,
-          customer_phone: customerPhone,
+          order_title: orderTitle.trim(),
+          customer_name: customerName.trim(),
           fabric_type: fabricType,
           collar_type: collarType,
           deadline_date: deadlineDate,
           priority: priority,
-          total_qty: totalQty,
+          package_type: packageType,
+          ink_type: inkType,
+          order_type: orderType,
+          design_location: designLocation,
+          cutting_location: cuttingLocation,
+          size_breakdown: {
+            adult: adultMatrix,
+            kid: kidMatrix
+          },
+          roster_wa_text: rosterWaText.trim() || null,
+          roster_screenshot_url: rosterScreenshotUrl || null,
+          roster_screenshot_url_2: rosterScreenshotUrl2 || null,
+          total_qty: matrixTotals.totalOrderQty,
           total_price: totalPrice,
           down_payment: downPayment,
           is_paid_off: isPaid,
           production_notes: productionNotes,
+          pricing_config: { priceAdult, priceKid, pricePants, feeLongSleeve, feeJumbo, discountAmount },
           is_makloon: isMakloon,
           makloon_vendor_name: isMakloon ? makloonVendorName.trim() : null
         })
@@ -295,21 +452,7 @@ export default function OrderDetailPage() {
 
       if (oErr) throw oErr
 
-      await supabase.from("order_roster_items").delete().eq("order_id", orderId)
-
-      const rosterPayload = roster.map((r) => ({
-        order_id: orderId,
-        player_name: r.player_name.trim() || "-",
-        back_number: r.back_number.trim() || "-",
-        size: r.size,
-        sleeve_type: r.sleeve_type,
-        notes: r.notes.trim() || null,
-      }))
-
-      const { error: rErr } = await supabase.from("order_roster_items").insert(rosterPayload)
-      if (rErr) throw rErr
-
-      setMsg("Data pesanan, jalur jahit, catatan, dan rincian ukuran berhasil disimpan!")
+      setMsg("Data pesanan dan matriks ukuran berhasil diperbarui!")
     } catch (err: any) {
       setMsg("Gagal menyimpan: " + err.message)
     } finally {
@@ -333,120 +476,198 @@ export default function OrderDetailPage() {
           </Link>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold text-zinc-900 leading-tight">Edit Pesanan</h1>
-              <span className="font-mono text-xs bg-zinc-100 px-2 py-0.5 rounded font-bold text-zinc-800 border border-zinc-300">
+              <h1 className="text-base font-bold text-zinc-900 leading-tight">Detail & Edit Pesanan</h1>
+              <span className="font-mono text-xs bg-zinc-900 px-2 py-0.5 rounded font-black text-white shadow-2xs">
                 {orderNumber}
               </span>
             </div>
-            <p className="text-xs text-zinc-600">Kelola spesifikasi, galeri mockup desain, jalur pengerjaan jahit, dan rincian pesanan.</p>
+            <p className="text-xs text-zinc-600">Kelola spesifikasi, matriks ukuran, rincian biaya, dan catatan roster.</p>
           </div>
         </div>
 
-        <Link
-          href={`/orders/${orderId}/spk`}
-          target="_blank"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-300 rounded hover:bg-zinc-100 text-zinc-700 text-xs font-semibold shadow-2xs transition-colors"
-        >
-          <Printer className="h-3.5 w-3.5" />
-          <span>Cetak SPK</span>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-300 rounded hover:bg-zinc-100 text-zinc-700 text-xs font-semibold shadow-2xs transition-colors"
+          >
+            <span>Papan Kanban</span>
+          </Link>
+          <Link
+            href={`/orders/${orderId}/form-order`}
+            target="_blank"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-300 rounded hover:bg-zinc-100 text-zinc-800 text-xs font-semibold shadow-2xs transition-colors"
+          >
+            <FileText className="h-3.5 w-3.5 text-zinc-600" />
+            <span>Form Order (Konsumen)</span>
+          </Link>
+          <Link
+            href={`/orders/${orderId}/spk`}
+            target="_blank"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded text-xs font-semibold shadow-2xs transition-colors"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            <span>Cetak SPK</span>
+          </Link>
+        </div>
       </div>
 
       {msg && (
-        <div className={`p-3 rounded text-xs font-medium border ${
+        <div className={`p-3 rounded text-xs font-medium border flex items-center gap-2 ${
           msg.includes("berhasil") 
             ? "bg-emerald-50 text-emerald-800 border-emerald-200" 
             : "bg-red-50 text-red-700 border-red-200"
         }`}>
-          {msg}
+          {msg.includes("berhasil") ? <CheckCircle2 className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
+          <span>{msg}</span>
         </div>
       )}
 
-      {/* 3 SLOT MOCKUP GRID */}
+      {/* Visual Stepper 8 Tahap */}
       <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
-        <div>
+        <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
-            <ImageIcon className="h-3.5 w-3.5 text-zinc-600" /> Galeri Mockup Desain (Maksimal 3 Gambar)
+            <Clock className="h-3.5 w-3.5 text-zinc-600" /> Alur Produksi 8 Tahap Workshop
           </span>
-          <p className="text-[11px] text-zinc-500">
-            Gambar otomatis menyesuaikan layout SPK: 1 kotak jika 1 gambar, 2 kotak jika 2 gambar, atau 3 kotak simetris.
-          </p>
+          <div>
+            {currentStatus === "COMPLETED" ? (
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Selesai & Diambil
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                Posisi: {STAGES.find((s) => s.key === currentStatus)?.label || currentStatus.replace(/_/g, " ")}
+              </span>
+            )}
+          </div>
         </div>
 
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1.5 pt-1">
+          {STAGES.map((st, idx) => {
+            const isCompleted = activeStageIndex > idx
+            const isCurrent = activeStageIndex === idx
+
+            return (
+              <div
+                key={st.key}
+                className={`p-2 rounded border transition-colors flex flex-col justify-between min-h-[58px] ${
+                  isCurrent
+                    ? `${st.accent} text-white border-transparent shadow-xs ring-2 ring-zinc-900/10`
+                    : isCompleted
+                    ? "bg-emerald-50/70 border-emerald-200 text-emerald-900"
+                    : "bg-zinc-50 border-zinc-200 text-zinc-400"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={`font-mono text-[9px] font-black ${
+                    isCurrent ? "text-white/80" : isCompleted ? "text-emerald-700" : "text-zinc-400"
+                  }`}>
+                    {st.code}
+                  </span>
+                  {isCompleted && (
+                    <span className="h-3.5 w-3.5 rounded-full bg-emerald-600 text-white flex items-center justify-center">
+                      <Check className="h-2.5 w-2.5 stroke-[3]" />
+                    </span>
+                  )}
+                  {isCurrent && (
+                    <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
+                  )}
+                </div>
+
+                <div className="mt-1">
+                  <span className={`text-[10px] font-bold block leading-tight truncate ${
+                    isCurrent ? "text-white" : isCompleted ? "text-emerald-950" : "text-zinc-600"
+                  }`}>
+                    {st.label}
+                  </span>
+                  <span className={`text-[8.5px] block font-mono ${
+                    isCurrent ? "text-white/80" : isCompleted ? "text-emerald-600" : "text-zinc-400"
+                  }`}>
+                    {isCurrent ? "Sedang Proses" : isCompleted ? "Selesai" : "Menunggu"}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Galeri Mockup Desain (3 Slot) */}
+      <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
+        <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
+          <ImageIcon className="h-3.5 w-3.5 text-zinc-600" /> Galeri Mockup Desain (Maksimal 3 Gambar)
+        </span>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {/* Slot 1 */}
           <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/50 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-zinc-700">Gambar 1 (Utama)</span>
               {mockupUrl1 && (
-                <button type="button" onClick={() => handleDeleteMockup(1)} className="text-zinc-400 hover:text-red-600 p-0.5" title="Hapus Gambar 1">
+                <button type="button" onClick={() => handleDeleteMockup(1)} className="text-zinc-400 hover:text-red-600 p-0.5">
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
             {mockupUrl1 ? (
-              <div className="h-40 border border-zinc-200 rounded p-1 flex items-center justify-center bg-white">
+              <div className="h-36 border border-zinc-200 rounded p-1 flex items-center justify-center bg-white">
                 <img src={mockupUrl1} alt="Gambar 1" className="h-full w-full object-contain" />
               </div>
             ) : (
-              <div className="h-40 border border-dashed border-zinc-300 rounded flex flex-col items-center justify-center text-zinc-400 text-[11px]">
-                <span>Slot Kosong</span>
+              <div className="h-36 border border-dashed border-zinc-300 rounded flex items-center justify-center text-zinc-400 text-xs">
+                Slot Kosong
               </div>
             )}
-            <label className="cursor-pointer w-full inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-zinc-900 text-white hover:bg-zinc-800 rounded text-[11px] font-medium transition-colors">
-              <UploadCloud className="h-3 w-3" />
+            <label className="cursor-pointer w-full inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-zinc-900 text-white hover:bg-zinc-800 rounded text-xs font-medium transition-colors">
+              <UploadCloud className="h-3.5 w-3.5" />
               <span>{uploadingSlot === 1 ? "Mengunggah..." : mockupUrl1 ? "Ganti Gambar" : "Unggah Gambar 1"}</span>
               <input type="file" accept="image/*" onChange={(e) => handleUploadMockup(e, 1)} disabled={uploadingSlot === 1} className="hidden" />
             </label>
           </div>
 
-          {/* Slot 2 */}
           <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/50 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-zinc-700">Gambar 2 (Opsional)</span>
               {mockupUrl2 && (
-                <button type="button" onClick={() => handleDeleteMockup(2)} className="text-zinc-400 hover:text-red-600 p-0.5" title="Hapus Gambar 2">
+                <button type="button" onClick={() => handleDeleteMockup(2)} className="text-zinc-400 hover:text-red-600 p-0.5">
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
             {mockupUrl2 ? (
-              <div className="h-40 border border-zinc-200 rounded p-1 flex items-center justify-center bg-white">
+              <div className="h-36 border border-zinc-200 rounded p-1 flex items-center justify-center bg-white">
                 <img src={mockupUrl2} alt="Gambar 2" className="h-full w-full object-contain" />
               </div>
             ) : (
-              <div className="h-40 border border-dashed border-zinc-300 rounded flex flex-col items-center justify-center text-zinc-400 text-[11px]">
-                <span>Slot Kosong</span>
+              <div className="h-36 border border-dashed border-zinc-300 rounded flex items-center justify-center text-zinc-400 text-xs">
+                Slot Kosong
               </div>
             )}
-            <label className="cursor-pointer w-full inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-zinc-900 text-white hover:bg-zinc-800 rounded text-[11px] font-medium transition-colors">
-              <UploadCloud className="h-3 w-3" />
+            <label className="cursor-pointer w-full inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-zinc-900 text-white hover:bg-zinc-800 rounded text-xs font-medium transition-colors">
+              <UploadCloud className="h-3.5 w-3.5" />
               <span>{uploadingSlot === 2 ? "Mengunggah..." : mockupUrl2 ? "Ganti Gambar" : "Unggah Gambar 2"}</span>
               <input type="file" accept="image/*" onChange={(e) => handleUploadMockup(e, 2)} disabled={uploadingSlot === 2} className="hidden" />
             </label>
           </div>
 
-          {/* Slot 3 */}
           <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/50 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-zinc-700">Gambar 3 (Opsional)</span>
               {mockupUrl3 && (
-                <button type="button" onClick={() => handleDeleteMockup(3)} className="text-zinc-400 hover:text-red-600 p-0.5" title="Hapus Gambar 3">
+                <button type="button" onClick={() => handleDeleteMockup(3)} className="text-zinc-400 hover:text-red-600 p-0.5">
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
             {mockupUrl3 ? (
-              <div className="h-40 border border-zinc-200 rounded p-1 flex items-center justify-center bg-white">
+              <div className="h-36 border border-zinc-200 rounded p-1 flex items-center justify-center bg-white">
                 <img src={mockupUrl3} alt="Gambar 3" className="h-full w-full object-contain" />
               </div>
             ) : (
-              <div className="h-40 border border-dashed border-zinc-300 rounded flex flex-col items-center justify-center text-zinc-400 text-[11px]">
-                <span>Slot Kosong</span>
+              <div className="h-36 border border-dashed border-zinc-300 rounded flex items-center justify-center text-zinc-400 text-xs">
+                Slot Kosong
               </div>
             )}
-            <label className="cursor-pointer w-full inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-zinc-900 text-white hover:bg-zinc-800 rounded text-[11px] font-medium transition-colors">
-              <UploadCloud className="h-3 w-3" />
+            <label className="cursor-pointer w-full inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-zinc-900 text-white hover:bg-zinc-800 rounded text-xs font-medium transition-colors">
+              <UploadCloud className="h-3.5 w-3.5" />
               <span>{uploadingSlot === 3 ? "Mengunggah..." : mockupUrl3 ? "Ganti Gambar" : "Unggah Gambar 3"}</span>
               <input type="file" accept="image/*" onChange={(e) => handleUploadMockup(e, 3)} disabled={uploadingSlot === 3} className="hidden" />
             </label>
@@ -455,15 +676,25 @@ export default function OrderDetailPage() {
       </div>
 
       <form onSubmit={handleSave} className="space-y-4">
-        {/* SPESIFIKASI */}
+        {/* Parameter Utama 3 Kolom */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
-            <span className="text-[11px] font-semibold text-zinc-600 uppercase tracking-tight flex items-center gap-1.5">
-              <User className="h-3.5 w-3.5 text-zinc-500" /> Informasi Pemesan
+            <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5">
+              <User className="h-3.5 w-3.5 text-zinc-500" /> Informasi Pesanan
             </span>
             <div className="space-y-2 text-xs">
               <div>
-                <label className="block text-zinc-600 font-medium mb-1">Nama Pemesan / Tim</label>
+                <label className="block text-zinc-600 font-semibold mb-1">Nama Order</label>
+                <input
+                  type="text"
+                  required
+                  value={orderTitle}
+                  onChange={(e) => setOrderTitle(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border-2 border-zinc-800 rounded font-bold text-zinc-900 focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-zinc-50/50"
+                />
+              </div>
+              <div>
+                <label className="block text-zinc-600 font-medium mb-1">Nama Pemesan / Instansi</label>
                 <input
                   type="text"
                   required
@@ -472,129 +703,481 @@ export default function OrderDetailPage() {
                   className="w-full px-2.5 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none"
                 />
               </div>
-              <div>
-                <label className="block text-zinc-600 font-medium mb-1">Nomor WhatsApp</label>
-                <input
-                  type="text"
-                  required
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  className="w-full px-2.5 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-zinc-600 font-medium mb-1">Status Pipeline</label>
-                <input
-                  type="text"
-                  disabled
-                  value={currentStatus.replace(/_/g, " ")}
-                  className="w-full px-2.5 py-1.5 border border-zinc-200 rounded bg-zinc-100 text-zinc-600 font-mono text-[11px]"
-                />
+
+              {/* TIPE ORDER: FULL ORDER vs PRINT PRESS */}
+              <div className="pt-1 border-t border-zinc-100">
+                <label className="block text-zinc-700 font-bold mb-1 text-[11px]">Tipe Pengerjaan Order</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <label className="flex items-center gap-1.5 p-1.5 border rounded cursor-pointer text-[11px] font-medium bg-zinc-50">
+                    <input
+                      type="radio"
+                      name="order_type"
+                      checked={orderType === "FULL_ORDER"}
+                      onChange={() => setOrderType("FULL_ORDER")}
+                      className="text-zinc-900 focus:ring-zinc-900"
+                    />
+                    <span>Full Order</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 p-1.5 border rounded cursor-pointer text-[11px] font-medium bg-zinc-50">
+                    <input
+                      type="radio"
+                      name="order_type"
+                      checked={orderType === "PRINT_PRESS"}
+                      onChange={() => setOrderType("PRINT_PRESS")}
+                      className="text-zinc-900 focus:ring-zinc-900"
+                    />
+                    <span className="font-bold text-purple-900">Print + Press</span>
+                  </label>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
-            <span className="text-[11px] font-semibold text-zinc-600 uppercase tracking-tight flex items-center gap-1.5">
-              <Shirt className="h-3.5 w-3.5 text-zinc-500" /> Bahan & Model
+          <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-2.5">
+            <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5">
+              <Shirt className="h-3.5 w-3.5 text-zinc-500" /> Bahan & Parameter Produksi
             </span>
             <div className="space-y-2 text-xs">
-              <div>
-                <label className="block text-zinc-600 font-medium mb-1">Jenis Bahan Kain</label>
-                <select
-                  value={fabricType}
-                  onChange={(e) => setFabricType(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white"
-                >
-                  {FABRIC_OPTIONS.map((f) => (
-                    <option key={f} value={f}>{f}</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-zinc-600 font-medium mb-0.5">Bahan Kain</label>
+                  <select
+                    value={fabricType}
+                    onChange={(e) => setFabricType(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white text-[11px]"
+                  >
+                    {FABRIC_OPTIONS.map((f) => (<option key={f} value={f}>{f}</option>))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-zinc-600 font-medium mb-0.5">Model Kerah</label>
+                  <select
+                    value={collarType}
+                    onChange={(e) => setCollarType(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white text-[11px]"
+                  >
+                    {COLLAR_OPTIONS.map((c) => (<option key={c} value={c}>{c}</option>))}
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="block text-zinc-600 font-medium mb-1">Model Pola Kerah</label>
-                <select
-                  value={collarType}
-                  onChange={(e) => setCollarType(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white"
-                >
-                  {COLLAR_OPTIONS.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+
+              {/* Paket & Tinta */}
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-100">
+                <div>
+                  <label className="block text-zinc-700 font-bold mb-1 text-[11px]">Pilihan Paket</label>
+                  <div className="space-y-1">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                      <input
+                        type="radio"
+                        name="package_type"
+                        checked={packageType === "ATASAN"}
+                        onChange={() => setPackageType("ATASAN")}
+                        className="text-zinc-900"
+                      />
+                      <span>Atasan Saja</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                      <input
+                        type="radio"
+                        name="package_type"
+                        checked={packageType === "STELAN"}
+                        onChange={() => setPackageType("STELAN")}
+                        className="text-zinc-900"
+                      />
+                      <span className="font-semibold text-zinc-900">+ Celana</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-700 font-bold mb-1 text-[11px]">Tinta Sublim</label>
+                  <div className="space-y-1">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                      <input
+                        type="radio"
+                        name="ink_type"
+                        checked={inkType === "ORI"}
+                        onChange={() => setInkType("ORI")}
+                        className="text-zinc-900"
+                      />
+                      <span className="font-semibold text-blue-800">Tinta Ori</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                      <input
+                        type="radio"
+                        name="ink_type"
+                        checked={inkType === "CINA"}
+                        onChange={() => setInkType("CINA")}
+                        className="text-zinc-900"
+                      />
+                      <span>Tinta Cina</span>
+                    </label>
+                  </div>
+                </div>
               </div>
+
+              {/* Lokasi Desain & Potong */}
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-100 text-[10.5px]">
+                <div>
+                  <span className="text-zinc-600 font-medium block">Desain/Setting:</span>
+                  <select
+                    value={designLocation}
+                    onChange={(e) => setDesignLocation(e.target.value as any)}
+                    className="w-full px-1.5 py-1 border border-zinc-300 rounded bg-white text-[10.5px] mt-0.5"
+                  >
+                    <option value="DISINI">Disini (Setting)</option>
+                    <option value="LUAR">File Luar / Jadi</option>
+                  </select>
+                </div>
+                <div>
+                  <span className="text-zinc-600 font-medium block">Potong Kain:</span>
+                  <select
+                    value={cuttingLocation}
+                    onChange={(e) => setCuttingLocation(e.target.value as any)}
+                    className="w-full px-1.5 py-1 border border-zinc-300 rounded bg-white text-[10.5px] mt-0.5"
+                  >
+                    <option value="DISINI">Disini (Potong)</option>
+                    <option value="LUAR">Kain Bawa Sendiri</option>
+                  </select>
+                </div>
+              </div>
+
               <div>
-                <label className="block text-zinc-600 font-medium mb-1">Prioritas Pengerjaan</label>
-                <select
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white"
-                >
-                  <option value="NORMAL">Normal</option>
-                  <option value="HIGH">Tinggi (Mepet)</option>
-                  <option value="URGENT">Urgent (Express)</option>
-                </select>
+                <label className="block text-zinc-600 font-medium mb-1">Target Deadline</label>
+                <input
+                  type="date"
+                  required
+                  value={deadlineDate}
+                  onChange={(e) => setDeadlineDate(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900 focus:outline-none"
+                />
               </div>
             </div>
           </div>
 
-          {/* Kolom 3: Volume Pcs & Biaya Terpadu (Format Ribuan) */}
           <div className="border border-zinc-200 bg-white p-3 rounded shadow-2xs space-y-2">
             <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5">
-              <DollarSign className="h-3.5 w-3.5 text-zinc-500" /> Volume & Biaya
+              <DollarSign className="h-3.5 w-3.5 text-zinc-500" /> Biaya & Pembayaran
             </span>
             <div className="space-y-1.5 text-xs">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-zinc-600 font-semibold mb-0.5">Total Pcs</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="500"
-                    value={roster.length || ""}
-                    onChange={(e) => handleQtyChange(Number(e.target.value) || 0)}
-                    className="w-full px-2 py-1 border-2 border-zinc-900 rounded font-mono font-bold bg-zinc-50 text-center text-xs"
-                    title="Ubah angka ini untuk otomatis menyesuaikan jumlah baris di bawah"
-                  />
-                </div>
-                <div>
-                  <label className="block text-zinc-600 font-medium mb-0.5">Target Deadline</label>
-                  <input
-                    type="date"
-                    required
-                    value={deadlineDate}
-                    onChange={(e) => setDeadlineDate(e.target.value)}
-                    className="w-full px-2 py-1 border border-zinc-300 rounded font-mono text-xs"
-                  />
+              <div>
+                <label className="block text-zinc-600 font-semibold mb-0.5">Total Qty (Pcs)</label>
+                <div className="w-full py-1 px-2 border-2 border-zinc-900 rounded font-mono font-bold text-zinc-900 bg-zinc-100 text-center text-xs">
+                  {matrixTotals.totalOrderQty} pcs
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-zinc-600 font-medium mb-0.5">Total Tagihan (Rp)</label>
-                  <input
-                    type="text"
-                    value={formatRibuan(totalPrice)}
-                    onChange={(e) => setTotalPrice(parseRibuan(e.target.value))}
-                    className="w-full px-2 py-1 border border-zinc-300 rounded font-mono font-bold text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-zinc-600 font-medium mb-0.5">Uang Masuk / DP (Rp)</label>
-                  <input
-                    type="text"
-                    value={formatRibuan(downPayment)}
-                    onChange={(e) => setDownPayment(parseRibuan(e.target.value))}
-                    className="w-full px-2 py-1 border border-zinc-300 rounded font-mono text-xs text-emerald-700 font-semibold"
-                  />
-                </div>
+              <div>
+                <label className="block text-zinc-600 font-medium mb-0.5">Total Tagihan (Rp)</label>
+                <input
+                  type="text"
+                  value={formatRibuan(totalPrice)}
+                  onChange={(e) => setTotalPrice(parseRibuan(e.target.value))}
+                  className="w-full px-2 py-1 border border-zinc-300 rounded font-mono text-xs font-bold bg-zinc-50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-600 font-medium mb-0.5">Uang Masuk / DP (Rp)</label>
+                <input
+                  type="text"
+                  value={formatRibuan(downPayment)}
+                  onChange={(e) => setDownPayment(parseRibuan(e.target.value))}
+                  className="w-full px-2 py-1 border border-zinc-300 rounded font-mono text-xs text-emerald-700 font-semibold"
+                />
               </div>
 
               <div className="pt-1.5 border-t flex justify-between items-center text-xs">
-                <span className="text-zinc-600 font-medium">Sisa Tagihan:</span>
+                <span className="text-zinc-600 font-medium">Sisa Piutang:</span>
                 <span className="font-bold font-mono text-sm text-red-600">
-                  Rp {(totalPrice - downPayment > 0 ? totalPrice - downPayment : 0).toLocaleString("id-ID")}
+                  Rp {sisaPiutang.toLocaleString("id-ID")}
                 </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* MATRIKS UKURAN: DEWASA & ANAK */}
+        <div className="border border-zinc-200 bg-white rounded p-3.5 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between border-b border-zinc-200 pb-2">
+            <div>
+              <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5 text-zinc-600" /> Matriks Ukuran & Rekapitulasi Produksi
+              </span>
+              <p className="text-[11px] text-zinc-500">
+                Pembaruan angka otomatis memperbarui total order. Kolom celana aktif jika memilih paket Stelan.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="px-2 py-0.5 rounded font-mono font-bold bg-zinc-100 text-zinc-800 border">
+                Paket: {packageType === "STELAN" ? "Stelan Celana" : "Atasan Saja"}
+              </span>
+              <span className="px-2 py-0.5 rounded font-mono font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                Tinta: {inkType === "ORI" ? "Ori" : "Cina"}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 1. Kategori Anak (Sebelah Kiri) */}
+            <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/40 space-y-2">
+              <div className="flex items-center justify-between border-b border-zinc-200 pb-1">
+                <span className="text-xs font-bold text-zinc-800 uppercase flex items-center gap-1">
+                  🧒 Kategori Anak
+                </span>
+                <span className="font-mono text-[11px] font-bold text-zinc-700">
+                  Subtotal: {matrixTotals.kidBaju} Baju {packageType === "STELAN" && `• ${matrixTotals.kidCelana} Celana`}
+                </span>
+              </div>
+
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="text-zinc-600 font-semibold uppercase text-[10px] border-b border-zinc-200">
+                    <th className="py-1 px-2 w-20">Ukuran</th>
+                    <th className="py-1 px-2 text-center">Pendek</th>
+                    <th className="py-1 px-2 text-center">Panjang</th>
+                    {packageType === "STELAN" && <th className="py-1 px-2 text-center bg-purple-50 text-purple-900">Celana</th>}
+                    <th className="py-1 px-2 text-right">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-200">
+                  {KID_SIZES.map((sz) => {
+                    const row = kidMatrix[sz] || { pendek: 0, panjang: 0, celana: 0 }
+                    const subBaju = Number(row.pendek || 0) + Number(row.panjang || 0)
+
+                    return (
+                      <tr key={sz} className="hover:bg-zinc-100/60">
+                        <td className="py-1 px-2 font-bold font-mono text-zinc-800 text-[11px]">{sz}</td>
+                        <td className="py-1 px-2 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            value={row.pendek || ""}
+                            onChange={(e) => handleKidChange(sz, "pendek", Number(e.target.value) || 0)}
+                            className="w-14 text-center py-0.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900"
+                            placeholder="0"
+                          />
+                        </td>
+                        <td className="py-1 px-2 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            value={row.panjang || ""}
+                            onChange={(e) => handleKidChange(sz, "panjang", Number(e.target.value) || 0)}
+                            className="w-14 text-center py-0.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900"
+                            placeholder="0"
+                          />
+                        </td>
+                        {packageType === "STELAN" && (
+                          <td className="py-1 px-2 text-center bg-purple-50/50">
+                            <input
+                              type="number"
+                              min="0"
+                              value={row.celana || ""}
+                              onChange={(e) => handleKidChange(sz, "celana", Number(e.target.value) || 0)}
+                              className="w-14 text-center py-0.5 border border-purple-300 rounded font-mono text-xs focus:ring-1 focus:ring-purple-900 bg-white"
+                              placeholder="0"
+                            />
+                          </td>
+                        )}
+                        <td className="py-1 px-2 text-right font-mono font-bold text-zinc-900">
+                          {subBaju} pcs
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 2. Kategori Dewasa (Sebelah Kanan) */}
+            <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/40 space-y-2">
+              <div className="flex items-center justify-between border-b border-zinc-200 pb-1">
+                <span className="text-xs font-bold text-zinc-800 uppercase flex items-center gap-1">
+                  👕 Kategori Dewasa
+                </span>
+                <span className="font-mono text-[11px] font-bold text-zinc-700">
+                  Subtotal: {matrixTotals.adultBaju} Baju {packageType === "STELAN" && `• ${matrixTotals.adultCelana} Celana`}
+                </span>
+              </div>
+
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="text-zinc-600 font-semibold uppercase text-[10px] border-b border-zinc-200">
+                    <th className="py-1 px-2 w-16">Ukuran</th>
+                    <th className="py-1 px-2 text-center">Pendek</th>
+                    <th className="py-1 px-2 text-center">Panjang</th>
+                    {packageType === "STELAN" && <th className="py-1 px-2 text-center bg-purple-50 text-purple-900">Celana</th>}
+                    <th className="py-1 px-2 text-right">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-200">
+                  {ADULT_SIZES.map((sz) => {
+                    const row = adultMatrix[sz] || { pendek: 0, panjang: 0, celana: 0 }
+                    const subBaju = Number(row.pendek || 0) + Number(row.panjang || 0)
+
+                    return (
+                      <tr key={sz} className="hover:bg-zinc-100/60">
+                        <td className="py-1 px-2 font-bold font-mono text-zinc-800">{sz}</td>
+                        <td className="py-1 px-2 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            value={row.pendek || ""}
+                            onChange={(e) => handleAdultChange(sz, "pendek", Number(e.target.value) || 0)}
+                            className="w-14 text-center py-0.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900"
+                            placeholder="0"
+                          />
+                        </td>
+                        <td className="py-1 px-2 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            value={row.panjang || ""}
+                            onChange={(e) => handleAdultChange(sz, "panjang", Number(e.target.value) || 0)}
+                            className="w-14 text-center py-0.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900"
+                            placeholder="0"
+                          />
+                        </td>
+                        {packageType === "STELAN" && (
+                          <td className="py-1 px-2 text-center bg-purple-50/50">
+                            <input
+                              type="number"
+                              min="0"
+                              value={row.celana || ""}
+                              onChange={(e) => handleAdultChange(sz, "celana", Number(e.target.value) || 0)}
+                              className="w-14 text-center py-0.5 border border-purple-300 rounded font-mono text-xs focus:ring-1 focus:ring-purple-900 bg-white"
+                              placeholder="0"
+                            />
+                          </td>
+                        )}
+                        <td className="py-1 px-2 text-right font-mono font-bold text-zinc-900">
+                          {subBaju} pcs
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Grand Total Bar */}
+          <div className="bg-zinc-900 text-white p-2.5 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+              <span className="font-bold">Grand Total Produksi:</span>
+            </div>
+            <div className="flex items-center gap-3 font-mono text-[11px]">
+              <span>Anak: <strong>{matrixTotals.kidBaju} pcs</strong></span>
+              <span>&bull;</span>
+              <span>Dewasa: <strong>{matrixTotals.adultBaju} pcs</strong></span>
+              {packageType === "STELAN" && (
+                <>
+                  <span>&bull;</span>
+                  <span className="text-purple-300 font-bold">Celana: {matrixTotals.grandTotalCelana} pcs</span>
+                </>
+              )}
+              <span>&bull;</span>
+              <span className="text-emerald-300 font-bold text-xs">
+                TOTAL: {matrixTotals.grandTotalBaju} Stel / Pcs
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* WADAH FLEKSIBEL ROSTER: WA TEXT & 2 SCREENSHOT */}
+        <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
+          <div className="border-b border-zinc-200 pb-2">
+            <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5 text-zinc-600" /> Roster & Catatan Konsumen (Copy-Paste WA & 2 Screenshot)
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="block text-xs font-semibold text-zinc-700">
+                Teks Catatan Khusus / Roster (Chat WhatsApp Asli)
+              </label>
+              <textarea
+                rows={5}
+                value={rosterWaText}
+                onChange={(e) => setRosterWaText(e.target.value)}
+                placeholder="Paste daftar nama/nomor pemain di sini..."
+                className="w-full p-2.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-zinc-50/50 text-zinc-800 leading-relaxed"
+              />
+            </div>
+
+            {/* 2 Slot Screenshot */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              <div className="space-y-1">
+                <span className="block text-xs font-semibold text-zinc-700">Screenshot 1</span>
+                {rosterScreenshotUrl ? (
+                  <div className="border border-zinc-200 rounded p-2 bg-zinc-50 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-emerald-700">✓ Gambar 1 Siap</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteScreenshot(1)}
+                        className="text-zinc-400 hover:text-red-600 p-0.5"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="h-32 border border-zinc-300 rounded bg-white flex items-center justify-center overflow-hidden">
+                      <img src={rosterScreenshotUrl} alt="Screenshot 1" className="h-full w-full object-contain" />
+                    </div>
+                  </div>
+                ) : (
+                  <label className="h-[120px] border-2 border-dashed border-zinc-300 rounded hover:border-zinc-500 transition-colors flex flex-col items-center justify-center p-3 cursor-pointer bg-zinc-50/30 text-center">
+                    <UploadCloud className="h-5 w-5 text-zinc-400 mb-0.5" />
+                    <span className="text-xs font-semibold text-zinc-700">
+                      {uploadingScreenshot ? "Mengunggah..." : "Unggah Screenshot 1"}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleUploadScreenshot(e, 1)}
+                      disabled={uploadingScreenshot}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <span className="block text-xs font-semibold text-zinc-700">Screenshot 2 (Opsional)</span>
+                {rosterScreenshotUrl2 ? (
+                  <div className="border border-zinc-200 rounded p-2 bg-zinc-50 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-emerald-700">✓ Gambar 2 Siap</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteScreenshot(2)}
+                        className="text-zinc-400 hover:text-red-600 p-0.5"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="h-32 border border-zinc-300 rounded bg-white flex items-center justify-center overflow-hidden">
+                      <img src={rosterScreenshotUrl2} alt="Screenshot 2" className="h-full w-full object-contain" />
+                    </div>
+                  </div>
+                ) : (
+                  <label className="h-[120px] border-2 border-dashed border-zinc-300 rounded hover:border-zinc-500 transition-colors flex flex-col items-center justify-center p-3 cursor-pointer bg-zinc-50/30 text-center">
+                    <UploadCloud className="h-5 w-5 text-zinc-400 mb-0.5" />
+                    <span className="text-xs font-semibold text-zinc-700">
+                      {uploadingScreenshot2 ? "Mengunggah..." : "Unggah Screenshot 2"}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleUploadScreenshot(e, 2)}
+                      disabled={uploadingScreenshot2}
+                      className="hidden"
+                    />
+                  </label>
+                )}
               </div>
             </div>
           </div>
@@ -616,7 +1199,7 @@ export default function OrderDetailPage() {
                     name="sewing_route"
                     checked={!isMakloon}
                     onChange={() => setIsMakloon(false)}
-                    className="text-zinc-900 focus:ring-zinc-900"
+                    className="text-zinc-900"
                   />
                   <span className="font-medium text-zinc-800">Jahit Internal Workshop</span>
                 </label>
@@ -626,7 +1209,7 @@ export default function OrderDetailPage() {
                     name="sewing_route"
                     checked={isMakloon}
                     onChange={() => setIsMakloon(true)}
-                    className="text-zinc-900 focus:ring-zinc-900"
+                    className="text-zinc-900"
                   />
                   <span className="font-medium text-purple-800 font-semibold">Mitra Makloon Luar</span>
                 </label>
@@ -643,35 +1226,28 @@ export default function OrderDetailPage() {
                 </div>
 
                 {loadingPartners ? (
-                  <div className="text-zinc-400 font-mono text-[11px] py-1.5">Memuat daftar partner...</div>
+                  <div className="text-zinc-400 font-mono text-[11px] py-1.5">Memuat partner...</div>
                 ) : partnerList.length > 0 ? (
                   <select
                     value={makloonVendorName}
                     onChange={(e) => setMakloonVendorName(e.target.value)}
                     required={isMakloon}
-                    className="w-full px-2.5 py-1.5 border border-purple-300 rounded text-xs focus:ring-1 focus:ring-purple-600 focus:outline-none bg-purple-50/50 font-medium text-zinc-900"
+                    className="w-full px-2.5 py-1.5 border border-purple-300 rounded text-xs bg-purple-50/50 font-medium text-zinc-900"
                   >
                     <option value="">-- Pilih Partner Makloon Terdaftar --</option>
                     {partnerList.map((p) => (
-                      <option key={p.id} value={p.name}>
-                        {p.name}
-                      </option>
+                      <option key={p.id} value={p.name}>{p.name}</option>
                     ))}
                   </select>
                 ) : (
-                  <div className="space-y-1">
-                    <input
-                      type="text"
-                      placeholder="Belum ada data partner di menu Makloon, ketik nama di sini..."
-                      value={makloonVendorName}
-                      onChange={(e) => setMakloonVendorName(e.target.value)}
-                      required={isMakloon}
-                      className="w-full px-2.5 py-1.5 border border-purple-300 rounded text-xs focus:ring-1 focus:ring-purple-600 focus:outline-none bg-purple-50/50 text-zinc-900"
-                    />
-                    <span className="text-[10px] text-amber-700 block">
-                      Tip: Daftarkan partner di menu <strong>Partner Makloon</strong> agar tersimpan rapi sebagai dropdown.
-                    </span>
-                  </div>
+                  <input
+                    type="text"
+                    placeholder="Ketik nama partner makloon..."
+                    value={makloonVendorName}
+                    onChange={(e) => setMakloonVendorName(e.target.value)}
+                    required={isMakloon}
+                    className="w-full px-2.5 py-1.5 border border-purple-300 rounded text-xs bg-purple-50/50 text-zinc-900"
+                  />
                 )}
               </div>
             )}
@@ -687,123 +1263,12 @@ export default function OrderDetailPage() {
             rows={3}
             value={productionNotes}
             onChange={(e) => setProductionNotes(e.target.value)}
-            placeholder="Contoh: Badan depan gradasi merah-hitam, motif celana garis samping emas. Kerah model rib V-Neck."
+            placeholder="Instruksi tambahan untuk penjahit atau pemotong kain..."
             className="w-full p-2.5 border border-zinc-300 rounded text-xs focus:ring-1 focus:ring-zinc-900 focus:outline-none text-zinc-800 leading-relaxed placeholder:text-zinc-400"
           />
         </div>
 
-        {/* TABEL RINCIAN UKURAN & NAMA */}
-        <div className="border border-zinc-200 bg-white rounded overflow-hidden shadow-2xs">
-          <div className="p-3 border-b border-zinc-200 bg-zinc-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="space-y-1">
-              <span className="text-xs font-bold text-zinc-800 flex items-center gap-1.5 uppercase tracking-tight">
-                <Layers className="h-3.5 w-3.5 text-zinc-600" /> Daftar Rincian Pesanan ({roster.length} Pcs)
-              </span>
-              
-              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                <span className="text-[10px] text-zinc-500 font-semibold uppercase flex items-center gap-1">
-                  <PieChart className="h-3 w-3" /> Sebaran:
-                </span>
-                {sizeSummary.map(([sz, count]) => (
-                  <span key={sz} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-zinc-200/80 text-zinc-800 border border-zinc-300">
-                    <span>{sz}:</span>
-                    <span className="text-zinc-950">{count} pcs</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleAddRow}
-              className="inline-flex items-center gap-1 bg-white border border-zinc-300 hover:bg-zinc-100 text-zinc-800 text-[11px] font-medium px-2.5 py-1.5 rounded transition-colors shadow-2xs self-start sm:self-auto"
-            >
-              <Plus className="h-3 w-3" /> Tambah Baris Manual
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-zinc-100/70 border-b border-zinc-200 text-zinc-600 font-semibold uppercase text-[10px]">
-                <tr>
-                  <th className="py-2 px-3 w-10 text-center">No</th>
-                  <th className="py-2 px-3 min-w-[160px]">Nama Punggung</th>
-                  <th className="py-2 px-3 w-28">No Punggung</th>
-                  <th className="py-2 px-3 w-28">Ukuran</th>
-                  <th className="py-2 px-3 w-32">Lengan</th>
-                  <th className="py-2 px-3 min-w-[140px]">Catatan Khusus</th>
-                  <th className="py-2 px-2 w-10 text-center">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-200">
-                {roster.map((row, index) => (
-                  <tr key={index} className="hover:bg-zinc-50/50">
-                    <td className="py-1.5 px-3 text-center text-zinc-600 font-mono text-[11px]">{index + 1}</td>
-                    <td className="py-1.5 px-3">
-                      <input
-                        type="text"
-                        placeholder="Nama pemain / inisial"
-                        value={row.player_name}
-                        onChange={(e) => handleRosterChange(index, "player_name", e.target.value)}
-                        className="w-full px-2 py-1 border border-zinc-200 rounded text-xs focus:ring-1 focus:ring-zinc-900 focus:outline-none uppercase"
-                      />
-                    </td>
-                    <td className="py-1.5 px-3">
-                      <input
-                        type="text"
-                        placeholder="00"
-                        value={row.back_number}
-                        onChange={(e) => handleRosterChange(index, "back_number", e.target.value)}
-                        className="w-full px-2 py-1 border border-zinc-200 rounded text-xs font-mono focus:ring-1 focus:ring-zinc-900 focus:outline-none text-center"
-                      />
-                    </td>
-                    <td className="py-1.5 px-3">
-                      <select
-                        value={row.size}
-                        onChange={(e) => handleRosterChange(index, "size", e.target.value)}
-                        className="w-full px-1.5 py-1 border border-zinc-200 rounded text-xs bg-white focus:outline-none font-semibold"
-                      >
-                        {SIZE_OPTIONS.map((sz) => (
-                          <option key={sz} value={sz}>{sz}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="py-1.5 px-3">
-                      <select
-                        value={row.sleeve_type}
-                        onChange={(e) => handleRosterChange(index, "sleeve_type", e.target.value as any)}
-                        className="w-full px-1.5 py-1 border border-zinc-200 rounded text-xs bg-white focus:outline-none"
-                      >
-                        <option value="SHORT">Pendek</option>
-                        <option value="LONG">Panjang (+Manset)</option>
-                      </select>
-                    </td>
-                    <td className="py-1.5 px-3">
-                      <input
-                        type="text"
-                        placeholder="Opsional (cth: Kiper / Polos)"
-                        value={row.notes}
-                        onChange={(e) => handleRosterChange(index, "notes", e.target.value)}
-                        className="w-full px-2 py-1 border border-zinc-200 rounded text-xs focus:outline-none text-zinc-600"
-                      />
-                    </td>
-                    <td className="py-1.5 px-2 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRow(index)}
-                        disabled={roster.length <= 1}
-                        className="text-zinc-400 hover:text-red-600 disabled:opacity-30 p-1"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
+        {/* Tombol Simpan */}
         <div className="flex justify-end gap-3 pt-2">
           <Link
             href="/orders"

@@ -1,29 +1,43 @@
-import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
+import { createClient } from "@supabase/supabase-js"
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const { userId } = await req.json()
+    const { userId } = await request.json()
+    
     if (!userId) {
-      return NextResponse.json({ error: "User ID wajib disertakan." }, { status: 400 })
+      return NextResponse.json({ error: "ID Pengguna wajib disertakan." }, { status: 400 })
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return NextResponse.json(
+        { error: "Kunci rahasia SUPABASE_SERVICE_ROLE_KEY belum dikonfigurasi di file .env.local" }, 
+        { status: 500 }
+      )
+    }
+
+    // Menggunakan kunci Service Role untuk bypass keamanan standar dan masuk sebagai Super Admin
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
     })
 
-    // Hapus dari Auth Supabase sehingga tidak bisa login lagi
-    const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(userId)
-    if (authError) throw authError
+    // Menghapus akun login dari tabel auth.users
+    // (Data di tabel 'profiles' akan ikut terhapus otomatis berkat relasi ON DELETE CASCADE di database)
+    const { data, error } = await supabaseAdmin.auth.admin.deleteUser(userId)
 
-    // Hapus dari profil
-    await supabaseAdmin.from("profiles").delete().eq("id", userId)
+    if (error) {
+      throw error
+    }
 
-    return NextResponse.json({ success: true })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 })
+    return NextResponse.json({ message: "Akses staf berhasil dicabut permanen.", data })
+    
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

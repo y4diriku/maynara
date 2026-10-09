@@ -1,23 +1,36 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
+import { compressImage } from "@/lib/imageCompressor"
 import Link from "next/link"
-import { ArrowLeft, Save, Plus, Trash2, Users2, Shirt, User, DollarSign, Layers } from "lucide-react"
-
-interface RosterItem {
-  player_name: string
-  back_number: string
-  size: string
-  sleeve_type: "SHORT" | "LONG"
-  notes: string
-}
+import { 
+  ArrowLeft, 
+  Save, 
+  Trash2, 
+  Users2, 
+  Shirt, 
+  User, 
+  DollarSign, 
+  Layers, 
+  UploadCloud, 
+  FileText, 
+  CheckCircle2
+} from "lucide-react"
 
 interface PartnerItem {
   id: string
   name: string
 }
+
+interface SizeRow {
+  pendek: number
+  panjang: number
+  celana: number
+}
+
+type SizeMatrix = Record<string, SizeRow>
 
 const FABRIC_OPTIONS = [
   "Dryfit Milano",
@@ -36,7 +49,8 @@ const COLLAR_OPTIONS = [
   "Kerah Mandarin / Sanghai"
 ]
 
-const SIZE_OPTIONS = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "Anak (S-XL)"]
+const ADULT_SIZES = ["S", "M", "L", "XL", "2XL", "3XL"]
+const KID_SIZES = ["S Anak", "M Anak", "L Anak", "XL Anak"]
 
 function formatRibuan(num: number): string {
   if (!num || isNaN(num)) return ""
@@ -51,34 +65,69 @@ function parseRibuan(str: string): number {
 export default function NewOrderPage() {
   const router = useRouter()
   const [submitting, setSubmitting] = useState(false)
-  const [catatanDesain, setCatatanDesain] = useState("")
-  const [linkDriveAset, setLinkDriveAset] = useState("")
   const [errorMsg, setErrorMsg] = useState("")
 
+  // Identitas Pesanan
+  const [orderTitle, setOrderTitle] = useState("")
   const [customerName, setCustomerName] = useState("")
-  const [customerPhone, setCustomerPhone] = useState("")
+  const [priority, setPriority] = useState("NORMAL")
+  const [currentAdmin, setCurrentAdmin] = useState<string>("Admin Manayra")
+
+  // Parameter Spesifikasi, Tipe Order & Lokasi
   const [fabricType, setFabricType] = useState(FABRIC_OPTIONS[0])
   const [collarType, setCollarType] = useState(COLLAR_OPTIONS[0])
   const [deadlineDate, setDeadlineDate] = useState("")
-  const [priority, setPriority] = useState("NORMAL")
+  const [packageType, setPackageType] = useState<"ATASAN" | "STELAN">("ATASAN")
+  const [inkType, setInkType] = useState<"ORI" | "CINA">("ORI")
+  const [orderType, setOrderType] = useState<"FULL_ORDER" | "PRINT_PRESS">("FULL_ORDER")
+  const [designLocation, setDesignLocation] = useState<"DISINI" | "LUAR">("DISINI")
+  const [cuttingLocation, setCuttingLocation] = useState<"DISINI" | "LUAR">("DISINI")
 
-  // Parameter Biaya & Jumlah Pcs Default Bersih (0)
-  const [totalQtyInput, setTotalQtyInput] = useState<number>(0)
-  const [unitPrice, setUnitPrice] = useState<number>(0)
+  // 5 State Harga Cerdas (Mekanisme B)
+  const [priceAdult, setPriceAdult] = useState<number>(0)
+  const [priceKid, setPriceKid] = useState<number>(0)
+  const [pricePants, setPricePants] = useState<number>(0)
+  const [feeLongSleeve, setFeeLongSleeve] = useState<number>(0)
+  const [feeJumbo, setFeeJumbo] = useState<number>(0)
   const [discountAmount, setDiscountAmount] = useState<number>(0)
-  const [totalPrice, setTotalPrice] = useState<number>(0)
   const [downPayment, setDownPayment] = useState<number>(0)
-  const [productionNotes, setProductionNotes] = useState("")
 
-  // Pilihan Makloon & Partner
+  // Matriks Ukuran
+  const [adultMatrix, setAdultMatrix] = useState<SizeMatrix>(() => {
+    const init: SizeMatrix = {}
+    ADULT_SIZES.forEach((sz) => { init[sz] = { pendek: 0, panjang: 0, celana: 0 } })
+    return init
+  })
+
+  const [kidMatrix, setKidMatrix] = useState<SizeMatrix>(() => {
+    const init: SizeMatrix = {}
+    KID_SIZES.forEach((sz) => { init[sz] = { pendek: 0, panjang: 0, celana: 0 } })
+    return init
+  })
+
+  // Wadah Roster: WA Text & 2 Slot Screenshot
+  const [rosterWaText, setRosterWaText] = useState("")
+  const [rosterScreenshotUrl, setRosterScreenshotUrl] = useState<string | null>(null)
+  const [rosterScreenshotUrl2, setRosterScreenshotUrl2] = useState<string | null>(null)
+  const [uploadingScreenshot, setUploadingScreenshot] = useState(false)
+  const [uploadingScreenshot2, setUploadingScreenshot2] = useState(false)
+
+  // Makloon & Catatan
   const [isMakloon, setIsMakloon] = useState(false)
   const [makloonVendorName, setMakloonVendorName] = useState("")
   const [partnerList, setPartnerList] = useState<PartnerItem[]>([])
-
-  const [roster, setRoster] = useState<RosterItem[]>([])
+  const [productionNotes, setProductionNotes] = useState("")
+  const [catatanDesain, setCatatanDesain] = useState("")
+  const [linkDriveAset, setLinkDriveAset] = useState("")
 
   useEffect(() => {
-    async function fetchPartners() {
+    async function initData() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        const { data: prof } = await supabase.from("profiles").select("full_name").eq("id", session.user.id).single()
+        if (prof?.full_name) setCurrentAdmin(prof.full_name)
+      }
+
       const { data } = await supabase.from("makloon_partners").select("*").order("created_at", { ascending: false })
       if (data && data.length > 0) {
         setPartnerList(data.map((p: any) => ({
@@ -87,68 +136,122 @@ export default function NewOrderPage() {
         })))
       }
     }
-    fetchPartners()
+    initData()
   }, [])
 
-  // Auto kalkulasi biaya & sinkronisasi baris secara realtime
-  const recalculateTotal = (qty: number, price: number, disc: number) => {
-    const subtotal = qty * price
-    const finalTotal = subtotal - disc > 0 ? subtotal - disc : 0
-    setTotalPrice(finalTotal)
-  }
+  // Kalkulasi Matriks Ukuran
+  const matrixTotals = useMemo(() => {
+    let adultPendek = 0, adultPanjang = 0, adultCelana = 0
+    ADULT_SIZES.forEach((sz) => {
+      adultPendek += Number(adultMatrix[sz]?.pendek || 0)
+      adultPanjang += Number(adultMatrix[sz]?.panjang || 0)
+      adultCelana += Number(adultMatrix[sz]?.celana || 0)
+    })
+    const adultBaju = adultPendek + adultPanjang
 
-  const handleQtyChange = (newQty: number) => {
-    setTotalQtyInput(newQty)
-    recalculateTotal(newQty, unitPrice, discountAmount)
+    let kidPendek = 0, kidPanjang = 0, kidCelana = 0
+    KID_SIZES.forEach((sz) => {
+      kidPendek += Number(kidMatrix[sz]?.pendek || 0)
+      kidPanjang += Number(kidMatrix[sz]?.panjang || 0)
+      kidCelana += Number(kidMatrix[sz]?.celana || 0)
+    })
+    const kidBaju = kidPendek + kidPanjang
 
-    if (newQty >= 0 && newQty <= 150) {
-      if (newQty > roster.length) {
-        const extraRows = Array.from({ length: newQty - roster.length }, () => ({
-          player_name: "",
-          back_number: "",
-          size: "L",
-          sleeve_type: "SHORT" as const,
-          notes: ""
-        }))
-        setRoster([...roster, ...extraRows])
-      } else if (newQty < roster.length) {
-        setRoster(roster.slice(0, newQty))
-      }
+    const grandTotalBaju = adultBaju + kidBaju
+    const grandTotalCelana = adultCelana + kidCelana
+    const totalOrderQty = grandTotalBaju > 0 ? grandTotalBaju : grandTotalCelana
+
+    return {
+      adultPendek, adultPanjang, adultCelana, adultBaju,
+      kidPendek, kidPanjang, kidCelana, kidBaju,
+      grandTotalBaju, grandTotalCelana, totalOrderQty
     }
+  }, [adultMatrix, kidMatrix])
+
+  // Kalkulasi Harga Cerdas Mekanisme B
+  const totalPrice = useMemo(() => {
+    let subtotal = 0
+
+    // Kalkulasi Dewasa
+    ADULT_SIZES.forEach((sz) => {
+      const isJumbo = sz === "2XL" || sz === "3XL" || sz === "4XL"
+      const jumboSurcharge = isJumbo ? feeJumbo : 0
+      
+      const p = Number(adultMatrix[sz]?.pendek || 0)
+      const pj = Number(adultMatrix[sz]?.panjang || 0)
+      const c = Number(adultMatrix[sz]?.celana || 0)
+
+      subtotal += p * (priceAdult + jumboSurcharge)
+      subtotal += pj * (priceAdult + jumboSurcharge + feeLongSleeve)
+      if (packageType === "STELAN") subtotal += c * pricePants
+    })
+
+    // Kalkulasi Anak
+    KID_SIZES.forEach((sz) => {
+      const p = Number(kidMatrix[sz]?.pendek || 0)
+      const pj = Number(kidMatrix[sz]?.panjang || 0)
+      const c = Number(kidMatrix[sz]?.celana || 0)
+
+      subtotal += p * priceKid
+      subtotal += pj * (priceKid + feeLongSleeve)
+      if (packageType === "STELAN") subtotal += c * pricePants
+    })
+
+    const finalCalc = subtotal - discountAmount
+    return finalCalc > 0 ? finalCalc : 0
+  }, [adultMatrix, kidMatrix, priceAdult, priceKid, pricePants, feeLongSleeve, feeJumbo, packageType, discountAmount])
+
+  const sisaPiutang = useMemo(() => {
+    const sisa = totalPrice - downPayment
+    return sisa > 0 ? sisa : 0
+  }, [totalPrice, downPayment])
+
+  const handleAdultChange = (sz: string, field: keyof SizeRow, val: number) => {
+    setAdultMatrix((prev) => ({
+      ...prev,
+      [sz]: { ...prev[sz], [field]: val >= 0 ? val : 0 }
+    }))
   }
 
-  const handleUnitPriceChange = (price: number) => {
-    setUnitPrice(price)
-    recalculateTotal(totalQtyInput, price, discountAmount)
+  const handleKidChange = (sz: string, field: keyof SizeRow, val: number) => {
+    setKidMatrix((prev) => ({
+      ...prev,
+      [sz]: { ...prev[sz], [field]: val >= 0 ? val : 0 }
+    }))
   }
 
-  const handleDiscountChange = (disc: number) => {
-    setDiscountAmount(disc)
-    recalculateTotal(totalQtyInput, unitPrice, disc)
-  }
+  const handleUploadScreenshot = async (e: React.ChangeEvent<HTMLInputElement>, slot: 1 | 2) => {
+    const file = e.target.files?.[0]
+    if (!file) return
 
-  const handleAddRow = () => {
-    const updated = [
-      ...roster,
-      { player_name: "", back_number: "", size: "L", sleeve_type: "SHORT" as const, notes: "" }
-    ]
-    setRoster(updated)
-    setTotalQtyInput(updated.length)
-    if (unitPrice > 0) setTotalPrice(updated.length * unitPrice)
-  }
+    if (slot === 1) setUploadingScreenshot(true)
+    else setUploadingScreenshot2(true)
 
-  const handleRemoveRow = (idx: number) => {
-    if (roster.length <= 1) return
-    const updated = roster.filter((_, i) => i !== idx)
-    setRoster(updated)
-    setTotalQtyInput(updated.length)
-    if (unitPrice > 0) setTotalPrice(updated.length * unitPrice)
-  }
+    try {
+      const compressedBlob = await compressImage(file, 1600, 0.8)
+      const fileName = `roster-ss-${slot}-${Date.now()}.webp`
 
-  const handleRosterChange = (idx: number, field: keyof RosterItem, val: string) => {
-    const updated = [...roster]
-    updated[idx] = { ...updated[idx], [field]: val }
-    setRoster(updated)
+      const { error: uploadError } = await supabase.storage
+        .from("order-mockups")
+        .upload(fileName, compressedBlob, {
+          contentType: "image/webp",
+          upsert: true
+        })
+
+      if (uploadError) throw uploadError
+
+      const { data: publicUrlData } = supabase.storage
+        .from("order-mockups")
+        .getPublicUrl(fileName)
+
+      if (slot === 1) setRosterScreenshotUrl(publicUrlData.publicUrl)
+      else setRosterScreenshotUrl2(publicUrlData.publicUrl)
+    } catch (err: any) {
+      alert("Gagal mengunggah screenshot: " + err.message)
+    } finally {
+      if (slot === 1) setUploadingScreenshot(false)
+      else setUploadingScreenshot2(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -158,26 +261,43 @@ export default function NewOrderPage() {
 
     try {
       const now = new Date()
-      const datePart = now.toISOString().slice(2, 10).replace(/-/g, "")
+      const yy = String(now.getFullYear()).slice(-2)
+      const mm = String(now.getMonth() + 1).padStart(2, "0")
+      const dd = String(now.getDate()).padStart(2, "0")
+      const datePart = `${yy}${mm}${dd}`
       const randomPart = Math.floor(1000 + Math.random() * 9000)
-      const orderNumber = `JR-${datePart}-${randomPart}`
+      const orderNumber = `MN-${datePart}-${randomPart}`
 
-      const totalQty = roster.length
       const isPaid = downPayment >= totalPrice
 
       const { data: orderData, error: orderError } = await supabase
         .from("orders")
         .insert({
           order_number: orderNumber,
-          customer_name: customerName,
-          customer_phone: customerPhone,
+          order_title: orderTitle.trim(),
+          customer_name: customerName.trim(),
+          customer_phone: "-",
           fabric_type: fabricType,
           collar_type: collarType,
           deadline_date: deadlineDate,
           priority: priority,
+          created_by_name: currentAdmin,
+          package_type: packageType,
+          ink_type: inkType,
+          order_type: orderType,
+          design_location: designLocation,
+          cutting_location: cuttingLocation,
+          pricing_config: { priceAdult, priceKid, pricePants, feeLongSleeve, feeJumbo, discountAmount },
+          size_breakdown: {
+            adult: adultMatrix,
+            kid: kidMatrix
+          },
+          roster_wa_text: rosterWaText.trim() || null,
+          roster_screenshot_url: rosterScreenshotUrl || null,
+          roster_screenshot_url_2: rosterScreenshotUrl2 || null,
           catatan_desain: catatanDesain.trim(),
-        link_drive_aset: linkDriveAset.trim(),
-        total_qty: totalQty,
+          link_drive_aset: linkDriveAset.trim(),
+          total_qty: matrixTotals.totalOrderQty,
           total_price: totalPrice,
           down_payment: downPayment,
           is_paid_off: isPaid,
@@ -190,21 +310,6 @@ export default function NewOrderPage() {
         .single()
 
       if (orderError) throw orderError
-
-      const rosterPayload = roster.map((r) => ({
-        order_id: orderData.id,
-        player_name: r.player_name.trim() || "-",
-        back_number: r.back_number.trim() || "-",
-        size: r.size,
-        sleeve_type: r.sleeve_type,
-        notes: r.notes.trim() || null,
-      }))
-
-      const { error: rosterError } = await supabase
-        .from("order_roster_items")
-        .insert(rosterPayload)
-
-      if (rosterError) throw rosterError
 
       await supabase.from("production_logs").insert({
         order_id: orderData.id,
@@ -220,7 +325,7 @@ export default function NewOrderPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4 pb-12">
+    <div className="max-w-5xl mx-auto space-y-4 pb-12">
       <div className="flex items-center gap-3 border-b border-zinc-200 pb-3">
         <Link
           href="/orders"
@@ -230,7 +335,7 @@ export default function NewOrderPage() {
         </Link>
         <div>
           <h1 className="text-base font-bold text-zinc-900 leading-tight">Buat Pesanan Baru</h1>
-          <p className="text-xs text-zinc-600">Input data pemesan, spesifikasi jersey, jalur pengerjaan, dan rincian pesanan.</p>
+          <p className="text-xs text-zinc-600">Input spesifikasi jersey, tipe order, matriks ukuran, dan catatan roster.</p>
         </div>
       </div>
 
@@ -241,81 +346,173 @@ export default function NewOrderPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* PARAMETER UTAMA */}
+        {/* PARAMETER UTAMA 3 KOLOM */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Kolom 1: Pemesan */}
+          {/* Kolom 1: Identitas & Tipe Pengerjaan */}
           <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
             <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5">
-              <User className="h-3.5 w-3.5 text-zinc-500" /> Informasi Pemesan
+              <User className="h-3.5 w-3.5 text-zinc-500" /> Informasi Pesanan
             </span>
             <div className="space-y-2 text-xs">
+              <div>
+                <label className="block text-zinc-600 font-semibold mb-1">Nama Order</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Jersey Futsal SSB"
+                  value={orderTitle}
+                  onChange={(e) => setOrderTitle(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border-2 border-zinc-800 rounded font-bold text-zinc-900 focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-zinc-50/50"
+                />
+              </div>
               <div>
                 <label className="block text-zinc-600 font-medium mb-1">Nama Pemesan / Instansi</label>
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: Tim Futsal / PT Sejahtera"
+                  placeholder="Contoh: Pak Budi / PT Sejahtera"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   className="w-full px-2.5 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none"
                 />
               </div>
-              <div>
-                <label className="block text-zinc-600 font-medium mb-1">Nomor WhatsApp</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="08123456789"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  className="w-full px-2.5 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-zinc-600 font-medium mb-1">Prioritas Pengerjaan</label>
-                <select
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white font-medium"
-                >
-                  <option value="NORMAL">Normal</option>
-                  <option value="HIGH">Tinggi (Mepet)</option>
-                  <option value="URGENT">Urgent (Express)</option>
-                </select>
+
+              <div className="pt-1 border-t border-zinc-100">
+                <label className="block text-zinc-700 font-bold mb-1 text-[11px]">Tipe Pengerjaan Order</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <label className="flex items-center gap-1.5 p-1.5 border rounded cursor-pointer text-[11px] font-medium bg-zinc-50">
+                    <input
+                      type="radio"
+                      name="order_type"
+                      checked={orderType === "FULL_ORDER"}
+                      onChange={() => setOrderType("FULL_ORDER")}
+                      className="text-zinc-900 focus:ring-zinc-900"
+                    />
+                    <span>Full Order</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 p-1.5 border rounded cursor-pointer text-[11px] font-medium bg-zinc-50">
+                    <input
+                      type="radio"
+                      name="order_type"
+                      checked={orderType === "PRINT_PRESS"}
+                      onChange={() => setOrderType("PRINT_PRESS")}
+                      className="text-zinc-900 focus:ring-zinc-900"
+                    />
+                    <span className="font-bold text-purple-900">Print + Press</span>
+                  </label>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Kolom 2: Bahan & Model */}
-          <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
+          {/* Kolom 2: Bahan, Model, Paket, Tinta & Lokasi Layanan */}
+          <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-2.5">
             <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5">
-              <Shirt className="h-3.5 w-3.5 text-zinc-500" /> Bahan & Model
+              <Shirt className="h-3.5 w-3.5 text-zinc-500" /> Bahan & Parameter Produksi
             </span>
             <div className="space-y-2 text-xs">
-              <div>
-                <label className="block text-zinc-600 font-medium mb-1">Jenis Bahan Kain</label>
-                <select
-                  value={fabricType}
-                  onChange={(e) => setFabricType(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white"
-                >
-                  {FABRIC_OPTIONS.map((f) => (
-                    <option key={f} value={f}>{f}</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-zinc-600 font-medium mb-0.5">Bahan Kain</label>
+                  <select
+                    value={fabricType}
+                    onChange={(e) => setFabricType(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white text-[11px]"
+                  >
+                    {FABRIC_OPTIONS.map((f) => (<option key={f} value={f}>{f}</option>))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-zinc-600 font-medium mb-0.5">Model Kerah</label>
+                  <select
+                    value={collarType}
+                    onChange={(e) => setCollarType(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white text-[11px]"
+                  >
+                    {COLLAR_OPTIONS.map((c) => (<option key={c} value={c}>{c}</option>))}
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="block text-zinc-600 font-medium mb-1">Model Pola Kerah</label>
-                <select
-                  value={collarType}
-                  onChange={(e) => setCollarType(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white"
-                >
-                  {COLLAR_OPTIONS.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-100">
+                <div>
+                  <label className="block text-zinc-700 font-bold mb-1 text-[11px]">Pilihan Paket</label>
+                  <div className="space-y-1">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                      <input
+                        type="radio"
+                        name="package_type"
+                        checked={packageType === "ATASAN"}
+                        onChange={() => setPackageType("ATASAN")}
+                        className="text-zinc-900"
+                      />
+                      <span>Atasan Saja</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                      <input
+                        type="radio"
+                        name="package_type"
+                        checked={packageType === "STELAN"}
+                        onChange={() => setPackageType("STELAN")}
+                        className="text-zinc-900"
+                      />
+                      <span className="font-semibold text-zinc-900">+ Celana</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-700 font-bold mb-1 text-[11px]">Tinta Sublim</label>
+                  <div className="space-y-1">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                      <input
+                        type="radio"
+                        name="ink_type"
+                        checked={inkType === "ORI"}
+                        onChange={() => setInkType("ORI")}
+                        className="text-zinc-900"
+                      />
+                      <span className="font-semibold text-blue-800">Tinta Ori</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                      <input
+                        type="radio"
+                        name="ink_type"
+                        checked={inkType === "CINA"}
+                        onChange={() => setInkType("CINA")}
+                        className="text-zinc-900"
+                      />
+                      <span>Tinta Cina</span>
+                    </label>
+                  </div>
+                </div>
               </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-100 text-[10.5px]">
+                <div>
+                  <span className="text-zinc-600 font-medium block">Desain/Setting:</span>
+                  <select
+                    value={designLocation}
+                    onChange={(e) => setDesignLocation(e.target.value as any)}
+                    className="w-full px-1.5 py-1 border border-zinc-300 rounded bg-white text-[10.5px] mt-0.5"
+                  >
+                    <option value="DISINI">Disini (Setting)</option>
+                    <option value="LUAR">File Luar / Jadi</option>
+                  </select>
+                </div>
+                <div>
+                  <span className="text-zinc-600 font-medium block">Potong Kain:</span>
+                  <select
+                    value={cuttingLocation}
+                    onChange={(e) => setCuttingLocation(e.target.value as any)}
+                    className="w-full px-1.5 py-1 border border-zinc-300 rounded bg-white text-[10.5px] mt-0.5"
+                  >
+                    <option value="DISINI">Disini (Potong)</option>
+                    <option value="LUAR">Kain Bawa Sendiri</option>
+                  </select>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-zinc-600 font-medium mb-1">Target Selesai (Deadline)</label>
                 <input
@@ -329,75 +526,348 @@ export default function NewOrderPage() {
             </div>
           </div>
 
-          {/* Kolom 3: Volume & Biaya (Format Ribuan & Diskon) */}
-          <div className="border border-zinc-200 bg-white p-3 rounded shadow-2xs space-y-2">
-            <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5">
-              <DollarSign className="h-3.5 w-3.5 text-zinc-500" /> Volume & Biaya
-            </span>
-            <div className="space-y-1.5 text-xs">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-zinc-600 font-semibold mb-0.5">Jml Order (Pcs)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    value={totalQtyInput || ""}
-                    onChange={(e) => handleQtyChange(Number(e.target.value) || 0)}
-                    className="w-full px-2 py-1 border-2 border-zinc-900 rounded font-mono font-bold text-zinc-900 bg-zinc-50 text-center text-xs"
-                    title="Ubah angka ini untuk otomatis menyesuaikan jumlah baris di bawah"
-                  />
+          {/* Kolom 3: Kalkulator Biaya Cerdas (Mekanisme B - Rapat & Kompak) */}
+          <div className="border border-zinc-200 bg-white p-3 rounded shadow-2xs space-y-2 flex flex-col justify-between">
+            <div>
+              <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5 mb-1.5 border-b border-zinc-100 pb-1.5">
+                <DollarSign className="h-3.5 w-3.5 text-zinc-500" /> Kalkulator Harga & Pembayaran
+              </span>
+              <div className="space-y-1.5 text-xs">
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div>
+                    <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">Harga Baju Dewasa</label>
+                    <input type="text" placeholder="0" value={formatRibuan(priceAdult)} onChange={(e) => setPriceAdult(parseRibuan(e.target.value))} className="w-full px-2 py-1 border border-zinc-300 rounded font-mono focus:ring-1 focus:ring-zinc-900 focus:outline-none text-xs" />
+                  </div>
+                  <div>
+                    <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">Harga Baju Anak</label>
+                    <input type="text" placeholder="0" value={formatRibuan(priceKid)} onChange={(e) => setPriceKid(parseRibuan(e.target.value))} className="w-full px-2 py-1 border border-zinc-300 rounded font-mono focus:ring-1 focus:ring-zinc-900 focus:outline-none text-xs" />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-zinc-600 font-medium mb-0.5">Harga / Pcs (Rp)</label>
-                  <input
-                    type="text"
-                    placeholder="0"
-                    value={formatRibuan(unitPrice)}
-                    onChange={(e) => handleUnitPriceChange(parseRibuan(e.target.value))}
-                    className="w-full px-2 py-1 border border-zinc-300 rounded font-mono text-xs"
-                  />
+
+                <div className="grid grid-cols-2 gap-1.5 border-t border-zinc-100 pt-1">
+                  <div>
+                    <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">+ Lengan Panjang</label>
+                    <input type="text" placeholder="0" value={formatRibuan(feeLongSleeve)} onChange={(e) => setFeeLongSleeve(parseRibuan(e.target.value))} className="w-full px-2 py-1 border border-zinc-300 rounded font-mono focus:ring-1 focus:ring-zinc-900 focus:outline-none text-xs" />
+                  </div>
+                  <div>
+                    <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">+ Jumbo (2XL+)</label>
+                    <input type="text" placeholder="0" value={formatRibuan(feeJumbo)} onChange={(e) => setFeeJumbo(parseRibuan(e.target.value))} className="w-full px-2 py-1 border border-zinc-300 rounded font-mono focus:ring-1 focus:ring-zinc-900 focus:outline-none text-xs" />
+                  </div>
+                  {packageType === "STELAN" && (
+                    <div className="col-span-2 bg-purple-50 p-1 rounded border border-purple-100">
+                      <label className="block text-purple-800 font-bold mb-0.5 text-[10px]">Harga Celana / Pcs</label>
+                      <input type="text" placeholder="0" value={formatRibuan(pricePants)} onChange={(e) => setPricePants(parseRibuan(e.target.value))} className="w-full px-2 py-0.5 border border-purple-300 rounded font-mono text-purple-900 focus:ring-1 focus:ring-purple-600 focus:outline-none text-xs" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5 border-t border-zinc-800 pt-1.5 mt-0.5">
+                  <div>
+                    <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">Diskon (Rp)</label>
+                    <input type="text" placeholder="0" value={formatRibuan(discountAmount)} onChange={(e) => setDiscountAmount(parseRibuan(e.target.value))} className="w-full px-2 py-1 border border-zinc-300 rounded font-mono text-red-600 font-bold focus:ring-1 focus:ring-red-600 focus:outline-none text-xs" />
+                  </div>
+                  <div>
+                    <label className="block text-zinc-900 font-bold mb-0.5 text-[10px]">TOTAL TAGIHAN (Rp)</label>
+                    <input type="text" readOnly value={formatRibuan(totalPrice)} className="w-full px-2 py-1 border-2 border-zinc-900 rounded font-mono font-black bg-zinc-100 text-zinc-900 cursor-not-allowed text-xs" />
+                  </div>
+                </div>
+
+                <div className="pt-0.5">
+                  <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">Uang Muka / DP (Rp)</label>
+                  <input type="text" placeholder="0" value={formatRibuan(downPayment)} onChange={(e) => setDownPayment(parseRibuan(e.target.value))} className="w-full px-2 py-1 border border-zinc-300 rounded font-mono font-bold text-emerald-700 focus:ring-1 focus:ring-emerald-600 focus:outline-none text-xs" />
                 </div>
               </div>
+            </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-zinc-600 font-medium mb-0.5">Diskon / Potongan (Rp)</label>
-                  <input
-                    type="text"
-                    placeholder="0"
-                    value={formatRibuan(discountAmount)}
-                    onChange={(e) => handleDiscountChange(parseRibuan(e.target.value))}
-                    className="w-full px-2 py-1 border border-zinc-300 rounded font-mono text-xs text-red-600 font-medium"
-                  />
-                </div>
-                <div>
-                  <label className="block text-zinc-600 font-medium mb-0.5">Total Tagihan (Rp)</label>
-                  <input
-                    type="text"
-                    value={formatRibuan(totalPrice)}
-                    onChange={(e) => setTotalPrice(parseRibuan(e.target.value))}
-                    className="w-full px-2 py-1 border border-zinc-300 rounded font-mono text-xs font-bold bg-zinc-50"
-                  />
-                </div>
-              </div>
+            <div className="pt-1.5 border-t border-zinc-200 flex justify-between items-center text-xs mt-auto">
+              <span className="text-zinc-600 font-bold">SISA TAGIHAN:</span>
+              <span className="font-black font-mono text-sm text-red-600">
+                Rp {sisaPiutang.toLocaleString("id-ID")}
+              </span>
+            </div>
+          </div>
+        </div>
 
-              <div>
-                <label className="block text-zinc-600 font-medium mb-0.5">Uang Muka / DP (Rp)</label>
-                <input
-                  type="text"
-                  placeholder="0"
-                  value={formatRibuan(downPayment)}
-                  onChange={(e) => setDownPayment(parseRibuan(e.target.value))}
-                  className="w-full px-2 py-1 border border-zinc-300 rounded font-mono text-xs font-semibold text-emerald-700"
-                />
-              </div>
+        {/* MATRIKS UKURAN: DEWASA & ANAK */}
+        <div className="border border-zinc-200 bg-white rounded p-3.5 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between border-b border-zinc-200 pb-2">
+            <div>
+              <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5 text-zinc-600" /> Matriks Ukuran & Rekapitulasi Produksi
+              </span>
+              <p className="text-[11px] text-zinc-500">
+                Isi jumlah pcs sesuai ukuran. Kolom Celana otomatis aktif jika memilih paket Stelan.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="px-2 py-0.5 rounded font-mono font-bold bg-zinc-100 text-zinc-800 border">
+                Paket: {packageType === "STELAN" ? "Stelan Celana" : "Atasan Saja"}
+              </span>
+              <span className="px-2 py-0.5 rounded font-mono font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                Tinta: {inkType === "ORI" ? "Ori" : "Cina"}
+              </span>
+            </div>
+          </div>
 
-              <div className="pt-1.5 border-t flex justify-between items-center text-xs">
-                <span className="text-zinc-600 font-medium">Sisa Piutang:</span>
-                <span className="font-bold font-mono text-sm text-red-600">
-                  Rp {(totalPrice - downPayment > 0 ? totalPrice - downPayment : 0).toLocaleString("id-ID")}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 1. Kategori Anak (Sebelah Kiri) */}
+            <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/40 space-y-2">
+              <div className="flex items-center justify-between border-b border-zinc-200 pb-1">
+                <span className="text-xs font-bold text-zinc-800 uppercase flex items-center gap-1">
+                  🧒 Kategori Anak
                 </span>
+                <span className="font-mono text-[11px] font-bold text-zinc-700">
+                  Subtotal: {matrixTotals.kidBaju} Baju {packageType === "STELAN" && `• ${matrixTotals.kidCelana} Celana`}
+                </span>
+              </div>
+
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="text-zinc-600 font-semibold uppercase text-[10px] border-b border-zinc-200">
+                    <th className="py-1 px-2 w-20">Ukuran</th>
+                    <th className="py-1 px-2 text-center">Pendek</th>
+                    <th className="py-1 px-2 text-center">Panjang</th>
+                    {packageType === "STELAN" && <th className="py-1 px-2 text-center bg-purple-50 text-purple-900">Celana</th>}
+                    <th className="py-1 px-2 text-right">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-200">
+                  {KID_SIZES.map((sz) => {
+                    const row = kidMatrix[sz] || { pendek: 0, panjang: 0, celana: 0 }
+                    const subBaju = Number(row.pendek || 0) + Number(row.panjang || 0)
+
+                    return (
+                      <tr key={sz} className="hover:bg-zinc-100/60">
+                        <td className="py-1 px-2 font-bold font-mono text-zinc-800 text-[11px]">{sz}</td>
+                        <td className="py-1 px-2 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            value={row.pendek || ""}
+                            onChange={(e) => handleKidChange(sz, "pendek", Number(e.target.value) || 0)}
+                            className="w-14 text-center py-0.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900"
+                            placeholder="0"
+                          />
+                        </td>
+                        <td className="py-1 px-2 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            value={row.panjang || ""}
+                            onChange={(e) => handleKidChange(sz, "panjang", Number(e.target.value) || 0)}
+                            className="w-14 text-center py-0.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900"
+                            placeholder="0"
+                          />
+                        </td>
+                        {packageType === "STELAN" && (
+                          <td className="py-1 px-2 text-center bg-purple-50/50">
+                            <input
+                              type="number"
+                              min="0"
+                              value={row.celana || ""}
+                              onChange={(e) => handleKidChange(sz, "celana", Number(e.target.value) || 0)}
+                              className="w-14 text-center py-0.5 border border-purple-300 rounded font-mono text-xs focus:ring-1 focus:ring-purple-900 bg-white"
+                              placeholder="0"
+                            />
+                          </td>
+                        )}
+                        <td className="py-1 px-2 text-right font-mono font-bold text-zinc-900">
+                          {subBaju} pcs
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 2. Kategori Dewasa (Sebelah Kanan) */}
+            <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/40 space-y-2">
+              <div className="flex items-center justify-between border-b border-zinc-200 pb-1">
+                <span className="text-xs font-bold text-zinc-800 uppercase flex items-center gap-1">
+                  👕 Kategori Dewasa
+                </span>
+                <span className="font-mono text-[11px] font-bold text-zinc-700">
+                  Subtotal: {matrixTotals.adultBaju} Baju {packageType === "STELAN" && `• ${matrixTotals.adultCelana} Celana`}
+                </span>
+              </div>
+
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="text-zinc-600 font-semibold uppercase text-[10px] border-b border-zinc-200">
+                    <th className="py-1 px-2 w-16">Ukuran</th>
+                    <th className="py-1 px-2 text-center">Pendek</th>
+                    <th className="py-1 px-2 text-center">Panjang</th>
+                    {packageType === "STELAN" && <th className="py-1 px-2 text-center bg-purple-50 text-purple-900">Celana</th>}
+                    <th className="py-1 px-2 text-right">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-200">
+                  {ADULT_SIZES.map((sz) => {
+                    const row = adultMatrix[sz] || { pendek: 0, panjang: 0, celana: 0 }
+                    const subBaju = Number(row.pendek || 0) + Number(row.panjang || 0)
+
+                    return (
+                      <tr key={sz} className="hover:bg-zinc-100/60">
+                        <td className="py-1 px-2 font-bold font-mono text-zinc-800">{sz}</td>
+                        <td className="py-1 px-2 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            value={row.pendek || ""}
+                            onChange={(e) => handleAdultChange(sz, "pendek", Number(e.target.value) || 0)}
+                            className="w-14 text-center py-0.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900"
+                            placeholder="0"
+                          />
+                        </td>
+                        <td className="py-1 px-2 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            value={row.panjang || ""}
+                            onChange={(e) => handleAdultChange(sz, "panjang", Number(e.target.value) || 0)}
+                            className="w-14 text-center py-0.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900"
+                            placeholder="0"
+                          />
+                        </td>
+                        {packageType === "STELAN" && (
+                          <td className="py-1 px-2 text-center bg-purple-50/50">
+                            <input
+                              type="number"
+                              min="0"
+                              value={row.celana || ""}
+                              onChange={(e) => handleAdultChange(sz, "celana", Number(e.target.value) || 0)}
+                              className="w-14 text-center py-0.5 border border-purple-300 rounded font-mono text-xs focus:ring-1 focus:ring-purple-900 bg-white"
+                              placeholder="0"
+                            />
+                          </td>
+                        )}
+                        <td className="py-1 px-2 text-right font-mono font-bold text-zinc-900">
+                          {subBaju} pcs
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Grand Total Bar */}
+          <div className="bg-zinc-900 text-white p-2.5 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+              <span className="font-bold">Grand Total Produksi:</span>
+            </div>
+            <div className="flex items-center gap-3 font-mono text-[11px]">
+              <span>Anak: <strong>{matrixTotals.kidBaju} pcs</strong></span>
+              <span>&bull;</span>
+              <span>Dewasa: <strong>{matrixTotals.adultBaju} pcs</strong></span>
+              {packageType === "STELAN" && (
+                <>
+                  <span>&bull;</span>
+                  <span className="text-purple-300 font-bold">Celana: {matrixTotals.grandTotalCelana} pcs</span>
+                </>
+              )}
+              <span>&bull;</span>
+              <span className="text-emerald-300 font-bold text-xs">
+                TOTAL: {matrixTotals.grandTotalBaju} Stel / Pcs
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* WADAH FLEKSIBEL ROSTER: WA TEXT & 2 SLOT SCREENSHOT */}
+        <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
+          <div className="border-b border-zinc-200 pb-2">
+            <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5 text-zinc-600" /> Roster & Catatan Konsumen (Copy-Paste WA & 2 Screenshot)
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="block text-xs font-semibold text-zinc-700">
+                Teks Catatan Khusus / Roster (Chat WhatsApp Asli)
+              </label>
+              <textarea
+                rows={5}
+                placeholder="Paste chat WhatsApp konsumen di sini..."
+                value={rosterWaText}
+                onChange={(e) => setRosterWaText(e.target.value)}
+                className="w-full p-2.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-zinc-50/50 text-zinc-800 leading-relaxed"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              <div className="space-y-1">
+                <span className="block text-xs font-semibold text-zinc-700">Screenshot 1</span>
+                {rosterScreenshotUrl ? (
+                  <div className="border border-zinc-200 rounded p-2 bg-zinc-50 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-emerald-700">✓ Gambar 1 Siap</span>
+                      <button
+                        type="button"
+                        onClick={() => setRosterScreenshotUrl(null)}
+                        className="text-zinc-400 hover:text-red-600 p-0.5"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="h-32 border border-zinc-300 rounded bg-white flex items-center justify-center overflow-hidden">
+                      <img src={rosterScreenshotUrl} alt="Screenshot 1" className="h-full w-full object-contain" />
+                    </div>
+                  </div>
+                ) : (
+                  <label className="h-[120px] border-2 border-dashed border-zinc-300 rounded hover:border-zinc-500 transition-colors flex flex-col items-center justify-center p-3 cursor-pointer bg-zinc-50/30 text-center">
+                    <UploadCloud className="h-5 w-5 text-zinc-400 mb-0.5" />
+                    <span className="text-xs font-semibold text-zinc-700">
+                      {uploadingScreenshot ? "Mengunggah..." : "Unggah Screenshot 1"}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleUploadScreenshot(e, 1)}
+                      disabled={uploadingScreenshot}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <span className="block text-xs font-semibold text-zinc-700">Screenshot 2 (Opsional)</span>
+                {rosterScreenshotUrl2 ? (
+                  <div className="border border-zinc-200 rounded p-2 bg-zinc-50 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-emerald-700">✓ Gambar 2 Siap</span>
+                      <button
+                        type="button"
+                        onClick={() => setRosterScreenshotUrl2(null)}
+                        className="text-zinc-400 hover:text-red-600 p-0.5"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="h-32 border border-zinc-300 rounded bg-white flex items-center justify-center overflow-hidden">
+                      <img src={rosterScreenshotUrl2} alt="Screenshot 2" className="h-full w-full object-contain" />
+                    </div>
+                  </div>
+                ) : (
+                  <label className="h-[120px] border-2 border-dashed border-zinc-300 rounded hover:border-zinc-500 transition-colors flex flex-col items-center justify-center p-3 cursor-pointer bg-zinc-50/30 text-center">
+                    <UploadCloud className="h-5 w-5 text-zinc-400 mb-0.5" />
+                    <span className="text-xs font-semibold text-zinc-700">
+                      {uploadingScreenshot2 ? "Mengunggah..." : "Unggah Screenshot 2"}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleUploadScreenshot(e, 2)}
+                      disabled={uploadingScreenshot2}
+                      className="hidden"
+                    />
+                  </label>
+                )}
               </div>
             </div>
           </div>
@@ -419,7 +889,7 @@ export default function NewOrderPage() {
                     name="sewing_route"
                     checked={!isMakloon}
                     onChange={() => setIsMakloon(false)}
-                    className="text-zinc-900 focus:ring-zinc-900"
+                    className="text-zinc-900"
                   />
                   <span className="font-medium text-zinc-800">Jahit Internal Workshop</span>
                 </label>
@@ -429,7 +899,7 @@ export default function NewOrderPage() {
                     name="sewing_route"
                     checked={isMakloon}
                     onChange={() => setIsMakloon(true)}
-                    className="text-zinc-900 focus:ring-zinc-900"
+                    className="text-zinc-900"
                   />
                   <span className="font-medium text-purple-800 font-semibold">Mitra Makloon Luar</span>
                 </label>
@@ -450,189 +920,66 @@ export default function NewOrderPage() {
                     value={makloonVendorName}
                     onChange={(e) => setMakloonVendorName(e.target.value)}
                     required={isMakloon}
-                    className="w-full px-2.5 py-1.5 border border-purple-300 rounded text-xs focus:ring-1 focus:ring-purple-600 focus:outline-none bg-purple-50/50 font-medium text-zinc-900"
+                    className="w-full px-2.5 py-1.5 border border-purple-300 rounded text-xs bg-purple-50/50 font-medium text-zinc-900"
                   >
                     <option value="">-- Pilih Partner Makloon Terdaftar --</option>
                     {partnerList.map((p) => (
-                      <option key={p.id} value={p.name}>
-                        {p.name}
-                      </option>
+                      <option key={p.id} value={p.name}>{p.name}</option>
                     ))}
                   </select>
                 ) : (
-                  <div className="space-y-1">
-                    <input
-                      type="text"
-                      placeholder="Belum ada data partner di menu Makloon, ketik nama di sini..."
-                      value={makloonVendorName}
-                      onChange={(e) => setMakloonVendorName(e.target.value)}
-                      required={isMakloon}
-                      className="w-full px-2.5 py-1.5 border border-purple-300 rounded text-xs focus:ring-1 focus:ring-purple-600 focus:outline-none bg-purple-50/50 text-zinc-900"
-                    />
-                    <span className="text-[10px] text-amber-700 block">
-                      Tip: Daftarkan partner di menu <strong>Partner Makloon</strong> agar tersimpan rapi sebagai dropdown.
-                    </span>
-                  </div>
+                  <input
+                    type="text"
+                    placeholder="Ketik nama partner makloon..."
+                    value={makloonVendorName}
+                    onChange={(e) => setMakloonVendorName(e.target.value)}
+                    required={isMakloon}
+                    className="w-full px-2.5 py-1.5 border border-purple-300 rounded text-xs bg-purple-50/50 text-zinc-900"
+                  />
                 )}
               </div>
             )}
           </div>
         </div>
 
-        {/* CATATAN TEKNIS */}
-        <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-2">
-          <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight">
-            Catatan Teknis & Instruksi Produksi
-          </span>
-          <textarea
-            rows={3}
-            value={productionNotes}
-            onChange={(e) => setProductionNotes(e.target.value)}
-            placeholder="Instruksi tambahan untuk penjahit atau pemotong kain..."
-            className="w-full p-2.5 border border-zinc-300 rounded text-xs focus:ring-1 focus:ring-zinc-900 focus:outline-none text-zinc-800 leading-relaxed placeholder:text-zinc-400"
-          />
-        </div>
-
-        {/* TABEL RINCIAN UKURAN & NAMA (UMUM & FLEKSIBEL) */}
-        <div className="border border-zinc-200 bg-white rounded overflow-hidden shadow-2xs">
-          <div className="p-3 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between">
-            <div>
-              <span className="text-xs font-bold text-zinc-800 flex items-center gap-1.5 uppercase tracking-tight">
-                <Layers className="h-3.5 w-3.5 text-zinc-600" /> Daftar Rincian Pesanan ({roster.length} Pcs)
-              </span>
-              <span className="text-[11px] text-zinc-500 font-mono">
-                Jumlah baris otomatis tersinkron dengan jumlah pcs di atas.
-              </span>
-            </div>
-            
-            <button
-              type="button"
-              onClick={handleAddRow}
-              className="inline-flex items-center gap-1 bg-white border border-zinc-300 hover:bg-zinc-100 text-zinc-800 text-[11px] font-medium px-2.5 py-1.5 rounded transition-colors shadow-2xs"
-            >
-              <Plus className="h-3 w-3" /> Tambah Baris Manual
-            </button>
+        {/* CATATAN TEKNIS & BRIEF DESAIN */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-2">
+            <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight">
+              Catatan Teknis & Instruksi Produksi
+            </span>
+            <textarea
+              rows={3}
+              value={productionNotes}
+              onChange={(e) => setProductionNotes(e.target.value)}
+              placeholder="Instruksi untuk bagian potong atau penjahit..."
+              className="w-full p-2.5 border border-zinc-300 rounded text-xs focus:ring-1 focus:ring-zinc-900 focus:outline-none text-zinc-800 leading-relaxed placeholder:text-zinc-400"
+            />
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-zinc-100/70 border-b border-zinc-200 text-zinc-600 font-semibold uppercase text-[10px]">
-                <tr>
-                  <th className="py-2 px-3 w-10 text-center">No</th>
-                  <th className="py-2 px-3 min-w-[160px]">Nama Punggung</th>
-                  <th className="py-2 px-3 w-28">No Punggung</th>
-                  <th className="py-2 px-3 w-28">Ukuran</th>
-                  <th className="py-2 px-3 w-32">Lengan</th>
-                  <th className="py-2 px-3 min-w-[140px]">Catatan Khusus</th>
-                  <th className="py-2 px-2 w-10 text-center">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-200">
-                {roster.map((row, index) => (
-                  <tr key={index} className="hover:bg-zinc-50/50">
-                    <td className="py-1.5 px-3 text-center text-zinc-600 font-mono text-[11px]">{index + 1}</td>
-                    <td className="py-1.5 px-3">
-                      <input
-                        type="text"
-                        placeholder="Nama pemain / inisial"
-                        value={row.player_name}
-                        onChange={(e) => handleRosterChange(index, "player_name", e.target.value)}
-                        className="w-full px-2 py-1 border border-zinc-200 rounded text-xs focus:ring-1 focus:ring-zinc-900 focus:outline-none uppercase"
-                      />
-                    </td>
-                    <td className="py-1.5 px-3">
-                      <input
-                        type="text"
-                        placeholder="00"
-                        value={row.back_number}
-                        onChange={(e) => handleRosterChange(index, "back_number", e.target.value)}
-                        className="w-full px-2 py-1 border border-zinc-200 rounded text-xs font-mono focus:ring-1 focus:ring-zinc-900 focus:outline-none text-center"
-                      />
-                    </td>
-                    <td className="py-1.5 px-3">
-                      <select
-                        value={row.size}
-                        onChange={(e) => handleRosterChange(index, "size", e.target.value)}
-                        className="w-full px-1.5 py-1 border border-zinc-200 rounded text-xs bg-white focus:outline-none font-semibold"
-                      >
-                        {SIZE_OPTIONS.map((sz) => (
-                          <option key={sz} value={sz}>{sz}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="py-1.5 px-3">
-                      <select
-                        value={row.sleeve_type}
-                        onChange={(e) => handleRosterChange(index, "sleeve_type", e.target.value as any)}
-                        className="w-full px-1.5 py-1 border border-zinc-200 rounded text-xs bg-white focus:outline-none"
-                      >
-                        <option value="SHORT">Pendek</option>
-                        <option value="LONG">Panjang</option>
-                      </select>
-                    </td>
-                    <td className="py-1.5 px-3">
-                      <input
-                        type="text"
-                        placeholder="Opsional (cth: Kiper / Polos)"
-                        value={row.notes}
-                        onChange={(e) => handleRosterChange(index, "notes", e.target.value)}
-                        className="w-full px-2 py-1 border border-zinc-200 rounded text-xs focus:outline-none text-zinc-600"
-                      />
-                    </td>
-                    <td className="py-1.5 px-2 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRow(index)}
-                        disabled={roster.length <= 1}
-                        className="text-zinc-400 hover:text-red-600 disabled:opacity-30 p-1"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="border border-purple-200 bg-purple-50/30 p-3.5 rounded shadow-2xs space-y-2">
+            <span className="text-xs font-bold text-purple-950 uppercase tracking-tight">
+              Instruksi Setting Desain & Link Aset (Opsional)
+            </span>
+            <input
+              type="text"
+              placeholder="Link folder Google Drive / server lokal..."
+              value={linkDriveAset}
+              onChange={(e) => setLinkDriveAset(e.target.value)}
+              className="w-full px-2.5 py-1.5 border border-zinc-300 rounded text-xs font-mono focus:ring-1 focus:ring-purple-900 focus:outline-none bg-white"
+            />
+            <textarea
+              rows={2}
+              placeholder="Brief motif warna/settingan..."
+              value={catatanDesain}
+              onChange={(e) => setCatatanDesain(e.target.value)}
+              className="w-full p-2 border border-zinc-300 rounded text-xs focus:ring-1 focus:ring-purple-900 focus:outline-none bg-white text-zinc-800"
+            />
           </div>
         </div>
 
-                    {/* Brief Desain & Link Aset (Opsional untuk Bagian Setting) */}
-            <div className="border border-purple-200 bg-purple-50/40 p-3 rounded-lg space-y-3">
-              <span className="text-[11px] font-bold text-purple-950 uppercase tracking-tight block">
-                Instruksi Operator Desain & Setting (Opsional)
-              </span>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-zinc-700 mb-1">
-                  Catatan Brief Desain
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Contoh: Gradasi biru-hitam, motif petir halus di pundak, kerah V-neck rib hitam list emas..."
-                  value={catatanDesain}
-                  onChange={(e) => setCatatanDesain(e.target.value)}
-                  className="w-full px-2.5 py-1.5 border border-zinc-300 rounded text-xs focus:ring-1 focus:ring-purple-900 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-zinc-700 mb-1">
-                  Link Aset Logo / Folder Desain
-                </label>
-                <input
-                  type="text"
-                  placeholder="Contoh: https://drive.google.com/... atau \\SERVER\Desain\Garuda_FC"
-                  value={linkDriveAset}
-                  onChange={(e) => setLinkDriveAset(e.target.value)}
-                  className="w-full px-2.5 py-1.5 border border-zinc-300 rounded text-xs font-mono focus:ring-1 focus:ring-purple-900 focus:outline-none"
-                />
-                <span className="text-[10px] text-zinc-500 mt-0.5 block">
-                  Bisa berupa link Google Drive atau alamat path folder lokal di jaringan workshop.
-                </span>
-              </div>
-            </div>
-
-<div className="flex justify-end gap-3 pt-2">
+        {/* Tombol Simpan */}
+        <div className="flex justify-end gap-3 pt-2">
           <Link
             href="/orders"
             className="px-4 py-2 text-xs font-medium border border-zinc-300 rounded hover:bg-zinc-100 text-zinc-700 transition-colors"
