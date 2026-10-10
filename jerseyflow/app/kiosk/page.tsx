@@ -14,12 +14,15 @@ import {
   History,
   ShieldAlert,
   User,
-  CheckCheck
+  CheckCheck,
+  Lock,
+  Banknote
 } from "lucide-react"
 
 interface Order {
   id: string
   order_number: string
+  order_title?: string | null
   customer_name: string
   fabric_type: string
   collar_type: string
@@ -27,6 +30,9 @@ interface Order {
   current_status: string
   priority: string
   deadline_date: string
+  total_price?: number
+  down_payment?: number
+  is_paid_off?: boolean
   is_makloon?: boolean
   makloon_vendor_name?: string | null
 }
@@ -40,72 +46,84 @@ interface AuditLog {
   operator_role?: string | null
 }
 
+// 8 POS PRODUKSI DENGAN VALIDASI ROLE DAN NARASI AUDIT TRAIL SINKRON
 const STAGES_CONFIG: { 
   [key: string]: { 
     label: string
+    code: string
     next: string
     nextLabel: string
     allowedRoles: string[]
-    handoverItem: string
     logMessage: (isMakloon?: boolean, vendorName?: string | null) => string
   } 
 } = {
   DESIGN_QUEUE: {
-    label: "Antrean Desain",
+    label: "01. Antrean Desain",
+    code: "01",
     next: "PRINTING",
-    nextLabel: "Cetak & Sublim",
-    // Owner, Admin, serta Operator Desain & Setting Pola
+    nextLabel: "02. Print Sublim",
     allowedRoles: ["OWNER", "ADMIN", "OPERATOR_DESIGN", "DESIGNER"],
-    handoverItem: "file cetak & lembar SPK",
-    logMessage: () => "File desain & layout pola selesai disiapkan. SPK diteruskan ke pos Cetak & Sublim."
+    logMessage: () => "Desain & layout pola selesai disiapkan. Berkas SPK diteruskan ke Pos 02 (Print Sublim)."
   },
   PRINTING: {
-    label: "Cetak & Sublim",
+    label: "02. Print Sublim",
+    code: "02",
     next: "CUTTING",
-    nextLabel: "Cutting Pola",
-    // Owner, Admin, Operator Print Sublim, dan Operator Press Rotary
-    allowedRoles: ["OWNER", "ADMIN", "OPERATOR_PRINT", "OPERATOR_PRESS"],
-    handoverItem: "kain hasil press sublim & lembar SPK",
-    logMessage: () => "Proses cetak kertas sublim & press transfer kain selesai. Gulungan kain & SPK diserahkan ke pos Cutting Pola."
+    nextLabel: "03. Potong Kain",
+    allowedRoles: ["OWNER", "ADMIN", "OPERATOR_PRINT"],
+    logMessage: () => "Proses cetak kertas sublimasi selesai. Kertas & SPK diserahkan ke Pos 03 (Potong Kain)."
   },
   CUTTING: {
-    label: "Cutting Pola",
-    next: "SEWING",
-    nextLabel: "Lini Jahit",
-    // Owner, Admin, dan Operator Potong Pola
+    label: "03. Potong Kain",
+    code: "03",
+    next: "HEAT_PRESS",
+    nextLabel: "04. Press Kain",
     allowedRoles: ["OWNER", "ADMIN", "OPERATOR_CUTTING"],
-    handoverItem: "potongan kain pola & lembar SPK",
+    logMessage: () => "Bahan kain rol dasar selesai dipotong panel kotak. Lembaran kain & SPK diserahkan ke Pos 04 (Press Kain)."
+  },
+  HEAT_PRESS: {
+    label: "04. Press Kain",
+    code: "04",
+    next: "PATTERN_CUTTING",
+    nextLabel: "05. Potong Pola",
+    allowedRoles: ["OWNER", "ADMIN", "OPERATOR_PRESS"],
+    logMessage: () => "Proses transfer panas mesin press sublim selesai. Kain bergambar & SPK diserahkan ke Pos 05 (Potong Pola)."
+  },
+  PATTERN_CUTTING: {
+    label: "05. Potong Pola",
+    code: "05",
+    next: "SEWING",
+    nextLabel: "06. Lini Jahit",
+    allowedRoles: ["OWNER", "ADMIN", "OPERATOR_CUTTING"],
     logMessage: (isMakloon, vendor) => isMakloon
-      ? `Potongan pola selesai dipotong. Kain & SPK diserahkan ke Mitra Makloon (${vendor || "Vendor Luar"}).`
-      : "Potongan pola jersey selesai dipotong per ukuran roster dan diserahkan ke Lini Jahit."
+      ? `Potongan pola baju presisi selesai dipotong. Kain & SPK diserahkan ke Mitra Makloon (${vendor || "Vendor Luar"}).`
+      : "Potongan pola jersey (badan, lengan, kerah) selesai dipotong presisi dan diserahkan ke Pos 06 (Lini Jahit)."
   },
   SEWING: {
-    label: "Lini Jahit",
+    label: "06. Lini Jahit",
+    code: "06",
     next: "QC_PACKING",
-    nextLabel: "QC & Packing",
-    // Owner, Admin, Mandor Jahit, dan Penjahit
+    nextLabel: "07. QC & Packing",
     allowedRoles: ["OWNER", "ADMIN", "SEWING_SUPERVISOR", "OPERATOR_SEWING"],
-    handoverItem: "jersey jadi & lembar SPK",
     logMessage: (isMakloon, vendor) => isMakloon
-      ? `Jahitan jersey selesai diterima kembali dari mitra makloon (${vendor || "Vendor Luar"}) dan diserahkan ke QC & Packing.`
-      : "Proses jahit jersey selesai dirakit dan diserahkan ke QC & Packing."
+      ? `Jahitan jersey selesai diterima kembali dari mitra makloon (${vendor || "Vendor Luar"}) dan diserahkan ke Pos 07 (QC & Packing).`
+      : "Proses jahit jersey selesai dirakit utuh dan diserahkan ke Pos 07 (QC & Packing)."
   },
   QC_PACKING: {
-    label: "QC & Packing",
+    label: "07. QC & Packing",
+    code: "07",
     next: "READY_FOR_DELIVERY",
-    nextLabel: "Siap Diambil",
-    // Owner, Admin, Quality Control, dan Operator Finishing Packing
+    nextLabel: "08. Siap Ambil",
     allowedRoles: ["OWNER", "ADMIN", "QC", "OPERATOR_PACKING"],
-    handoverItem: "paket jersey rapi & nota",
-    logMessage: () => "Pemeriksaan jahitan (QC), buang benang, dan packing plastik selesai. Pesanan siap diambil/dikirim."
+    logMessage: () => "Pemeriksaan QC jahitan, buang benang, dan packing plastik selesai (lolos sortir). Paket jersey ditempatkan di rak Pos 08 (Siap Ambil)."
   },
   READY_FOR_DELIVERY: {
-    label: "Siap Diambil",
+    label: "08. Siap Ambil",
+    code: "08",
     next: "COMPLETED",
-    nextLabel: "Pesanan Selesai",
-    allowedRoles: ["OWNER", "ADMIN"],
-    handoverItem: "arsip nota selesai",
-    logMessage: () => "Pesanan telah diserahkan ke pelanggan / kurir pengiriman. Pengerjaan selesai penuh."
+    nextLabel: "Selesai & Arsip",
+    allowedRoles: ["OWNER", "ACCOUNTING"], // HANYA OWNER & AKUNTING
+    logMessage: () => "Pesanan telah diserahterimakan ke pemesan. Pembayaran telah LUNAS. Pengerjaan selesai penuh & diarsipkan."
   }
 }
 
@@ -126,14 +144,19 @@ function formatTimeID(dateStr?: string | null): string {
   return d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WIB"
 }
 
-// Fungsi pembantu: Memastikan baris terbaru selalu di urutan paling pertama (Index 0)
+function formatIDR(amount: number): string {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0
+  }).format(amount)
+}
+
 function sortAuditLogsDescending(logs: AuditLog[]): AuditLog[] {
   return [...logs].sort((a, b) => {
     const timeA = a.created_at ? new Date(a.created_at).getTime() : 0
     const timeB = b.created_at ? new Date(b.created_at).getTime() : 0
-    if (timeA !== timeB) {
-      return timeB - timeA
-    }
+    if (timeA !== timeB) return timeB - timeA
     return (b.id || "").localeCompare(a.id || "")
   })
 }
@@ -158,7 +181,7 @@ function KioskContent() {
 
   const [operatorInfo, setOperatorInfo] = useState<{ name: string; role: string; id: string | null }>({
     name: "Operator",
-    role: "OPERATOR_PRINT",
+    role: "OPERATOR",
     id: null
   })
 
@@ -177,7 +200,7 @@ function KioskContent() {
 
         setOperatorInfo({
           name: profile?.full_name || session.user.email?.split("@")[0] || "Operator",
-          role: (profile?.role || "OPERATOR_PRINT").toUpperCase(),
+          role: (profile?.role || "OPERATOR").toUpperCase(),
           id: session.user.id
         })
       }
@@ -223,8 +246,6 @@ function KioskContent() {
         setMessage({ type: "error", text: `Pesanan "${target}" tidak ditemukan di sistem.` })
       } else {
         setCurrentOrder(oData)
-
-        // Hanya baca riwayat log tanpa menambah log sebelum divalidasi
         await loadAuditLogs(oData.id)
       }
     } catch (err: any) {
@@ -282,14 +303,30 @@ function KioskContent() {
   }
 
   const currentStageConfig = currentOrder ? STAGES_CONFIG[currentOrder.current_status] : null
+  
+  // Validasi Otorisasi Berdasarkan Role Akun Login
   const userHasPermission = currentStageConfig
     ? currentStageConfig.allowedRoles.includes(operatorInfo.role) ||
-      operatorInfo.role === "OWNER" ||
-      operatorInfo.role === "ADMIN"
+      operatorInfo.role === "OWNER"
     : false
+
+  // Pengecekan Khusus Keuangan di Pos 08 (Siap Ambil)
+  const isStage8 = currentOrder?.current_status === "READY_FOR_DELIVERY"
+  const sisaTagihan = Number(currentOrder?.total_price || 0) - Number(currentOrder?.down_payment || 0)
+  const isLunas = currentOrder?.is_paid_off || sisaTagihan <= 0
 
   const handleFinishCurrentStage = async () => {
     if (!currentOrder || !currentStageConfig || !userHasPermission) return
+
+    // KUNCI GERBANG KASIR: Mencegah penyerahan di Pos 08 jika belum lunas!
+    if (isStage8 && !isLunas) {
+      setMessage({
+        type: "error",
+        text: `Pesanan belum lunas (Sisa: ${formatIDR(sisaTagihan)}). Tagihan wajib diselesaikan melalui Bagian Keuangan / Kasir sebelum diserahkan!`
+      })
+      return
+    }
+
     setUpdating(true)
     setMessage(null)
 
@@ -298,17 +335,24 @@ function KioskContent() {
     const nextLabel = currentStageConfig.nextLabel
 
     try {
+      const updatePayload: Record<string, any> = {
+        current_status: nextStageKey,
+        updated_at: new Date().toISOString()
+      }
+
+      // Jika Pos 08 dieksekusi oleh Keuangan/Owner, tandai lunas otomatis
+      if (isStage8) {
+        updatePayload.is_paid_off = true
+        updatePayload.down_payment = Number(currentOrder.total_price || 0)
+      }
+
       const { error: updateErr } = await supabase
         .from("orders")
-        .update({
-          current_status: nextStageKey,
-          updated_at: new Date().toISOString()
-        })
+        .update(updatePayload)
         .eq("id", currentOrder.id)
 
       if (updateErr) throw updateErr
 
-      // Buat narasi log kontekstual sesuai divisi dan jalur (internal / makloon)
       const auditNote = currentStageConfig.logMessage(currentOrder.is_makloon, currentOrder.makloon_vendor_name)
 
       const { error: logErr } = await supabase.from("production_logs").insert({
@@ -400,7 +444,7 @@ function KioskContent() {
         >
           <input
             type="text"
-            placeholder="Ketik / tempel No. Order (cth: JR-2610...)"
+            placeholder="Ketik / tempel No. Order (cth: MN-2610...)"
             value={orderNumberInput}
             onChange={(e) => setOrderNumberInput(e.target.value)}
             className="flex-1 px-3 py-1.5 border border-zinc-300 rounded text-xs font-mono focus:ring-1 focus:ring-zinc-900 focus:outline-none"
@@ -438,13 +482,13 @@ function KioskContent() {
               Tugas di Pos {completedStageInfo.stageFinished} Telah Selesai!
             </h2>
             <p className="text-xs text-emerald-800">
-              Audit trail pengerjaan telah dicatat oleh: <strong>{completedStageInfo.operatorName}</strong>
+              Audit trail serah terima telah dicatat oleh: <strong>{completedStageInfo.operatorName}</strong>
             </p>
           </div>
 
           <div className="border border-emerald-200 bg-white p-3.5 rounded text-xs text-zinc-700 space-y-1.5 max-w-md mx-auto">
             <span className="text-[10px] uppercase font-bold text-zinc-400 block tracking-wider">
-              Instruksi Serah Terima
+              Instruksi Alur Pengerjaan
             </span>
             <p className="font-semibold text-zinc-900">
               Silakan serahkan berkas & hasil kerja ke pos selanjutnya:
@@ -466,7 +510,7 @@ function KioskContent() {
           </div>
         </div>
       ) : currentOrder ? (
-        /* 3. Detail SPK */
+        /* 3. Detail SPK Yang Sedang Dibuka */
         <div className="space-y-4">
           <div className="border border-zinc-200 bg-white rounded-lg shadow-2xs overflow-hidden">
             <div className="bg-zinc-900 text-white p-3 flex items-center justify-between">
@@ -482,25 +526,33 @@ function KioskContent() {
             </div>
 
             <div className="p-3.5 space-y-3">
+              {/* Nama Order Menonjol */}
+              <div className="bg-zinc-50 border border-zinc-200 rounded p-2.5 space-y-0.5">
+                <span className="text-[9px] uppercase font-bold text-zinc-400 block tracking-wider">Nama Order</span>
+                <strong className="text-xs font-black uppercase text-zinc-950 block">
+                  {currentOrder.order_title || "-"}
+                </strong>
+                <span className="text-[11px] text-zinc-600 block">
+                  Pemesan: <strong>{currentOrder.customer_name}</strong>
+                </span>
+              </div>
+
               <div className="grid grid-cols-2 gap-2.5 text-xs border-b border-zinc-100 pb-3">
-                <div>
-                  <span className="text-zinc-500 block text-[10px]">Nama Pemesan</span>
-                  <strong className="text-zinc-900 uppercase font-bold text-xs">{currentOrder.customer_name}</strong>
-                </div>
                 <div>
                   <span className="text-zinc-500 block text-[10px]">Target Deadline</span>
                   <strong className="text-red-700 font-mono text-xs">{formatDateID(currentOrder.deadline_date)}</strong>
                 </div>
                 <div>
-                  <span className="text-zinc-500 block text-[10px]">Bahan & Kerah</span>
-                  <span className="text-zinc-800 font-medium text-xs">{currentOrder.fabric_type} &bull; {currentOrder.collar_type}</span>
-                </div>
-                <div>
                   <span className="text-zinc-500 block text-[10px]">Total Pesanan</span>
                   <strong className="font-mono text-zinc-900 font-bold text-xs">{currentOrder.total_qty} PCS</strong>
                 </div>
+                <div className="col-span-2">
+                  <span className="text-zinc-500 block text-[10px]">Bahan & Kerah</span>
+                  <span className="text-zinc-800 font-medium text-xs">{currentOrder.fabric_type} &bull; {currentOrder.collar_type}</span>
+                </div>
               </div>
 
+              {/* Posisi Pengerjaan */}
               <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50 space-y-1">
                 <span className="text-[9px] uppercase font-bold text-zinc-500 block">Posisi Pengerjaan Saat Ini</span>
                 <div className="flex items-center justify-between">
@@ -513,11 +565,25 @@ function KioskContent() {
                 </div>
               </div>
 
+              {/* Peringatan Khusus Pos 08 (Kasir & Pelunasan) */}
+              {isStage8 && !isLunas && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-md text-xs space-y-1 text-red-900">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <Banknote className="h-4 w-4 text-red-600 shrink-0" />
+                    <span>Tagihan Belum Lunas ({formatIDR(sisaTagihan)})</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-red-700">
+                    Barang tidak dapat diserahkan sebelum pembayaran diselesaikan. Selesaikan transaksi di Bagian Keuangan.
+                  </p>
+                </div>
+              )}
+
+              {/* Tombol Eksekusi atau Peringatan Otorisasi */}
               {userHasPermission ? (
                 <div className="pt-1">
                   <button
                     type="button"
-                    disabled={updating}
+                    disabled={updating || (isStage8 && !isLunas)}
                     onClick={handleFinishCurrentStage}
                     className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-md text-xs transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
                   >
@@ -525,25 +591,29 @@ function KioskContent() {
                     <span>
                       {updating
                         ? "Menyimpan & Menyerahkan..."
-                        : `Selesaikan Tugas Pos ${currentStageConfig?.label || ""} & Teruskan`}
+                        : isStage8
+                        ? "Konfirmasi Penyerahan Barang & Arsip"
+                        : `Selesaikan Tugas ${currentStageConfig?.label || ""} & Teruskan`}
                     </span>
                   </button>
                 </div>
               ) : (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-amber-900 text-xs space-y-1">
                   <div className="flex items-center gap-1.5 font-bold">
-                    <ShieldAlert className="h-4 w-4 text-amber-700 shrink-0" />
-                    <span>Bukan Wewenang Divisi Anda</span>
+                    {isStage8 ? <Lock className="h-4 w-4 text-amber-700 shrink-0" /> : <ShieldAlert className="h-4 w-4 text-amber-700 shrink-0" />}
+                    <span>{isStage8 ? "Khusus Bagian Keuangan / Kasir" : "Bukan Wewenang Divisi Anda"}</span>
                   </div>
                   <p className="text-[11px] leading-relaxed text-amber-800">
-                    Pesanan ini saat ini berada di pos <strong>{currentStageConfig?.label}</strong>. Akun Anda adalah <strong>{operatorInfo.role}</strong>. Hanya operator pos terkait atau Admin/Owner yang dapat memindahkan pesanan ini.
+                    {isStage8 
+                      ? "Tahap akhir serah terima barang hanya dapat dieksekusi oleh akun dengan role ACCOUNTING atau OWNER."
+                      : `Pesanan ini berada di pos ${currentStageConfig?.label}. Akun Anda adalah ${operatorInfo.role}. Hanya operator pos terkait yang dapat memindahkan pesanan ini.`}
                   </p>
                 </div>
               )}
             </div>
           </div>
 
-          {/* 4. Timeline Riwayat Audit Trail Terbalik (Terbaru Selalu di Paling Atas) */}
+          {/* 4. Timeline Riwayat Audit Trail Terbalik (Terbaru di Paling Atas) */}
           <div className="border border-zinc-200 bg-white rounded-lg p-3.5 shadow-2xs space-y-2.5">
             <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
               <span className="text-xs font-bold text-zinc-900 flex items-center gap-1.5 uppercase tracking-tight">
