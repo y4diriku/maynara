@@ -22,6 +22,7 @@ interface Order {
   id: string
   order_number: string
   order_title?: string | null
+  created_by_name?: string | null
   customer_name: string
   customer_phone?: string | null
   total_qty: number
@@ -405,9 +406,12 @@ export default function KanbanDashboard() {
                         key={order.id}
                         className={`bg-white border border-zinc-200 ${priorityBorder} rounded p-2 shadow-2xs space-y-1 hover:border-zinc-400 transition-colors`}
                       >
-                        {/* 1. Baris No Order Menjadi Badge Prioritas Langsung */}
+                        {/* 1. Baris No Order Menjadi Badge Prioritas Langsung + Tooltip Pembuat */}
                         <div className="flex items-center justify-between gap-1 leading-none">
-                          <div className="flex items-center gap-1 truncate">
+                          <div 
+                            className="flex items-center gap-1 truncate cursor-help" 
+                            title={`Diterbitkan oleh: ${order.created_by_name || "Admin Manayra"}`}
+                          >
                             {isUrgent ? (
                               <span className="bg-red-600 text-white px-1.5 py-0.5 rounded text-[10.5px] font-mono font-black tracking-tight inline-flex items-center gap-1 animate-pulse shadow-2xs">
                                 <span>{order.order_number}</span>
