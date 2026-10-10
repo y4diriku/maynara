@@ -72,6 +72,7 @@ export default function KanbanDashboard() {
   const [loading, setLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [filterQuery, setFilterQuery] = useState("")
+  const [priorityMode, setPriorityMode] = useState(false)
 
   const [archiveModalOrder, setArchiveModalOrder] = useState<Order | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -240,15 +241,24 @@ export default function KanbanDashboard() {
     return { label: `${diffDays} hari lagi`, status: "aman" }
   }
 
+  const urgentCount = useMemo(() => {
+    return orders.filter((o) => o.priority === "HIGH" || o.priority === "URGENT").length
+  }, [orders])
+
   const filteredOrders = useMemo(() => {
     const q = filterQuery.toLowerCase().trim()
-    if (!q) return orders
-    return orders.filter((o) =>
-      o.order_number.toLowerCase().includes(q) ||
-      (o.order_title && o.order_title.toLowerCase().includes(q)) ||
-      o.customer_name.toLowerCase().includes(q)
-    )
-  }, [orders, filterQuery])
+    return orders.filter((o) => {
+      if (priorityMode && o.priority !== "HIGH" && o.priority !== "URGENT") {
+        return false
+      }
+      if (!q) return true
+      return (
+        o.order_number.toLowerCase().includes(q) ||
+        (o.order_title && o.order_title.toLowerCase().includes(q)) ||
+        o.customer_name.toLowerCase().includes(q)
+      )
+    })
+  }, [orders, filterQuery, priorityMode])
 
   return (
     <div className="space-y-3 max-w-full">
@@ -269,6 +279,30 @@ export default function KanbanDashboard() {
             title="Refresh Data Terbaru"
           >
             <RefreshCw className={isRefreshing ? "h-3.5 w-3.5 animate-spin text-zinc-900" : "h-3.5 w-3.5"} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setPriorityMode(!priorityMode)}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all shadow-2xs ${
+              priorityMode
+                ? "bg-red-600 text-white ring-2 ring-red-300"
+                : "bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-700"
+            }`}
+            title="Filter khusus pesanan Prioritas (⚡ Express & 🔥 Urgent)"
+          >
+            <span>⚡🔥</span>
+            <span className="hidden sm:inline">
+              {priorityMode ? "Prioritas Aktif" : "Filter Prioritas"}
+            </span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold ${
+              priorityMode
+                ? "bg-white text-red-700"
+                : urgentCount > 0
+                ? "bg-red-100 text-red-700"
+                : "bg-zinc-100 text-zinc-500"
+            }`}>
+              {urgentCount}
+            </span>
           </button>
           <div className="h-4 w-px bg-zinc-200 hidden sm:block" />
           <Link
@@ -358,16 +392,38 @@ export default function KanbanDashboard() {
                     const sisaPiutang = Number(order.total_price || 0) - Number(order.down_payment || 0)
                     const isLunas = order.is_paid_off || sisaPiutang <= 0
 
+                    const isUrgent = order.priority === "URGENT"
+                    const isHigh = order.priority === "HIGH"
+                    const priorityBorder = isUrgent
+                      ? "border-l-4 border-l-red-600"
+                      : isHigh
+                      ? "border-l-4 border-l-amber-500"
+                      : "border-l-zinc-200"
+
                     return (
                       <div
                         key={order.id}
-                        className="bg-white border border-zinc-200 rounded p-2 shadow-2xs space-y-1 hover:border-zinc-400 transition-colors"
+                        className={`bg-white border border-zinc-200 ${priorityBorder} rounded p-2 shadow-2xs space-y-1 hover:border-zinc-400 transition-colors`}
                       >
-                        {/* 1. Baris No Order & Total Qty (Sejajar & Rapat) */}
+                        {/* 1. Baris No Order Menjadi Badge Prioritas Langsung */}
                         <div className="flex items-center justify-between gap-1 leading-none">
-                          <span className="text-[11px] font-mono font-black text-zinc-950 tracking-tight truncate">
-                            {order.order_number}
-                          </span>
+                          <div className="flex items-center gap-1 truncate">
+                            {isUrgent ? (
+                              <span className="bg-red-600 text-white px-1.5 py-0.5 rounded text-[10.5px] font-mono font-black tracking-tight inline-flex items-center gap-1 animate-pulse shadow-2xs">
+                                <span>{order.order_number}</span>
+                                <span className="text-[9.5px]">🔥</span>
+                              </span>
+                            ) : isHigh ? (
+                              <span className="bg-amber-500 text-white px-1.5 py-0.5 rounded text-[10.5px] font-mono font-black tracking-tight inline-flex items-center gap-1 shadow-2xs">
+                                <span>{order.order_number}</span>
+                                <span className="text-[9.5px]">⚡</span>
+                              </span>
+                            ) : (
+                              <span className="text-[11px] font-mono font-black text-zinc-950 tracking-tight truncate">
+                                {order.order_number}
+                              </span>
+                            )}
+                          </div>
                           <span className="font-mono text-[9px] font-bold text-zinc-800 bg-zinc-100 border border-zinc-200/80 px-1 py-0.2 rounded shrink-0">
                             {order.total_qty} pcs
                           </span>

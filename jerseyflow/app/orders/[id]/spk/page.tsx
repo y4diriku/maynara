@@ -216,8 +216,14 @@ export default function SPKPrintPage() {
               <div className="flex-1">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-lg font-black tracking-tight uppercase">SURAT PERINTAH KERJA (SPK)</span>
-                  <span className="border border-black px-1.5 py-0.5 text-[9px] font-bold uppercase">
-                    {order.priority}
+                  <span className={`border px-1.5 py-0.5 text-[9px] font-black uppercase ${
+                    order.priority === "URGENT"
+                      ? "border-black bg-red-600 text-white"
+                      : order.priority === "HIGH"
+                      ? "border-black bg-black text-white"
+                      : "border-black bg-zinc-100 text-zinc-900"
+                  }`}>
+                    {order.priority === "URGENT" ? "🔥 SUPER URGENT" : order.priority === "HIGH" ? "⚡ PRIORITAS KILAT" : "REGULER"}
                   </span>
                   <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${
                     isPrintPress ? "border-black bg-black text-white" : "border-black bg-zinc-200 text-black"

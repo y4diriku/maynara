@@ -172,7 +172,6 @@ export default function NewOrderPage() {
   const totalPrice = useMemo(() => {
     let subtotal = 0
 
-    // Kalkulasi Dewasa
     ADULT_SIZES.forEach((sz) => {
       const isJumbo = sz === "2XL" || sz === "3XL" || sz === "4XL"
       const jumboSurcharge = isJumbo ? feeJumbo : 0
@@ -186,7 +185,6 @@ export default function NewOrderPage() {
       if (packageType === "STELAN") subtotal += c * pricePants
     })
 
-    // Kalkulasi Anak
     KID_SIZES.forEach((sz) => {
       const p = Number(kidMatrix[sz]?.pendek || 0)
       const pj = Number(kidMatrix[sz]?.panjang || 0)
@@ -348,7 +346,7 @@ export default function NewOrderPage() {
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* PARAMETER UTAMA 3 KOLOM */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Kolom 1: Identitas & Tipe Pengerjaan */}
+          {/* Kolom 1: Identitas & Prioritas */}
           <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
             <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5">
               <User className="h-3.5 w-3.5 text-zinc-500" /> Informasi Pesanan
@@ -377,6 +375,21 @@ export default function NewOrderPage() {
                 />
               </div>
 
+              {/* PRIORITAS PENGERJAAN DENGAN IKON & LABEL LENGKAP */}
+              <div>
+                <label className="block text-zinc-600 font-medium mb-1">Prioritas Pengerjaan</label>
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white font-semibold text-xs"
+                >
+                  <option value="NORMAL">🟢 Reguler / Standar (Normal)</option>
+                  <option value="HIGH">⚡ Express / Kilat (Prioritas Tinggi)</option>
+                  <option value="URGENT">🔥 Super Express / Urgent (Darurat)</option>
+                </select>
+              </div>
+
+              {/* TIPE ORDER: FULL ORDER vs PRINT PRESS */}
               <div className="pt-1 border-t border-zinc-100">
                 <label className="block text-zinc-700 font-bold mb-1 text-[11px]">Tipe Pengerjaan Order</label>
                 <div className="grid grid-cols-2 gap-1.5">
@@ -413,7 +426,7 @@ export default function NewOrderPage() {
             <div className="space-y-2 text-xs">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-zinc-600 font-medium mb-0.5">Bahan Kain</label>
+                  <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">Bahan Kain</label>
                   <select
                     value={fabricType}
                     onChange={(e) => setFabricType(e.target.value)}
@@ -423,7 +436,7 @@ export default function NewOrderPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-zinc-600 font-medium mb-0.5">Model Kerah</label>
+                  <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">Model Kerah</label>
                   <select
                     value={collarType}
                     onChange={(e) => setCollarType(e.target.value)}
@@ -526,7 +539,7 @@ export default function NewOrderPage() {
             </div>
           </div>
 
-          {/* Kolom 3: Kalkulator Biaya Cerdas (Mekanisme B - Rapat & Kompak) */}
+          {/* Kolom 3: Kalkulator Biaya Cerdas (Mekanisme B) */}
           <div className="border border-zinc-200 bg-white p-3 rounded shadow-2xs space-y-2 flex flex-col justify-between">
             <div>
               <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5 mb-1.5 border-b border-zinc-100 pb-1.5">
@@ -588,7 +601,7 @@ export default function NewOrderPage() {
           </div>
         </div>
 
-        {/* MATRIKS UKURAN: DEWASA & ANAK */}
+        {/* MATRIKS UKURAN: ANAK (KIRI) & DEWASA (KANAN) */}
         <div className="border border-zinc-200 bg-white rounded p-3.5 shadow-2xs space-y-3">
           <div className="flex items-center justify-between border-b border-zinc-200 pb-2">
             <div>

@@ -123,17 +123,17 @@ export default function OrderDetailPage() {
   const [uploadingScreenshot, setUploadingScreenshot] = useState(false)
   const [uploadingScreenshot2, setUploadingScreenshot2] = useState(false)
 
-  // Biaya
+  // Biaya Cerdas Mekanisme B
   const [priceAdult, setPriceAdult] = useState<number>(0)
   const [priceKid, setPriceKid] = useState<number>(0)
   const [pricePants, setPricePants] = useState<number>(0)
   const [feeLongSleeve, setFeeLongSleeve] = useState<number>(0)
   const [feeJumbo, setFeeJumbo] = useState<number>(0)
-  
   const [discountAmount, setDiscountAmount] = useState<number>(0)
-  const [totalPrice, setTotalPrice] = useState(0)
-  const [downPayment, setDownPayment] = useState(0)
+  const [downPayment, setDownPayment] = useState<number>(0)
   const [productionNotes, setProductionNotes] = useState("")
+  const [catatanDesain, setCatatanDesain] = useState("")
+  const [linkDriveAset, setLinkDriveAset] = useState("")
 
   // Makloon
   const [isMakloon, setIsMakloon] = useState(false)
@@ -177,16 +177,7 @@ export default function OrderDetailPage() {
       setDesignLocation((oData.design_location as any) || "DISINI")
       setCuttingLocation((oData.cutting_location as any) || "DISINI")
 
-      setTotalPrice(Number(oData.total_price) || 0)
       setDownPayment(Number(oData.down_payment) || 0)
-      if (oData.pricing_config) {
-        setPriceAdult(Number(oData.pricing_config.priceAdult || 0))
-        setPriceKid(Number(oData.pricing_config.priceKid || 0))
-        setPricePants(Number(oData.pricing_config.pricePants || 0))
-        setFeeLongSleeve(Number(oData.pricing_config.feeLongSleeve || 0))
-        setFeeJumbo(Number(oData.pricing_config.feeJumbo || 0))
-        setDiscountAmount(Number(oData.pricing_config.discountAmount || 0))
-      }
       setCurrentStatus(oData.current_status)
       setProductionNotes(oData.production_notes || "")
       setIsMakloon(Boolean(oData.is_makloon))
@@ -197,6 +188,16 @@ export default function OrderDetailPage() {
       setRosterWaText(oData.roster_wa_text || "")
       setRosterScreenshotUrl(oData.roster_screenshot_url || null)
       setRosterScreenshotUrl2(oData.roster_screenshot_url_2 || null)
+
+      // Memuat data harga tersimpan
+      if (oData.pricing_config) {
+        setPriceAdult(Number(oData.pricing_config.priceAdult || 0))
+        setPriceKid(Number(oData.pricing_config.priceKid || 0))
+        setPricePants(Number(oData.pricing_config.pricePants || 0))
+        setFeeLongSleeve(Number(oData.pricing_config.feeLongSleeve || 0))
+        setFeeJumbo(Number(oData.pricing_config.feeJumbo || 0))
+        setDiscountAmount(Number(oData.pricing_config.discountAmount || 0))
+      }
 
       // Memuat Matriks Ukuran dari JSONB
       if (oData.size_breakdown && typeof oData.size_breakdown === "object") {
@@ -264,7 +265,7 @@ export default function OrderDetailPage() {
     }
   }, [adultMatrix, kidMatrix])
 
-    const calculatedTotalPrice = useMemo(() => {
+  const totalPrice = useMemo(() => {
     let subtotal = 0
     ADULT_SIZES.forEach((sz) => {
       const isJumbo = sz === "2XL" || sz === "3XL" || sz === "4XL"
@@ -287,8 +288,6 @@ export default function OrderDetailPage() {
     const finalCalc = subtotal - discountAmount
     return finalCalc > 0 ? finalCalc : 0
   }, [adultMatrix, kidMatrix, priceAdult, priceKid, pricePants, feeLongSleeve, feeJumbo, packageType, discountAmount])
-
-  useEffect(() => { setTotalPrice(calculatedTotalPrice) }, [calculatedTotalPrice])
 
   const sisaPiutang = useMemo(() => {
     const sisa = totalPrice - downPayment
@@ -432,6 +431,7 @@ export default function OrderDetailPage() {
           order_type: orderType,
           design_location: designLocation,
           cutting_location: cuttingLocation,
+          pricing_config: { priceAdult, priceKid, pricePants, feeLongSleeve, feeJumbo, discountAmount },
           size_breakdown: {
             adult: adultMatrix,
             kid: kidMatrix
@@ -444,7 +444,8 @@ export default function OrderDetailPage() {
           down_payment: downPayment,
           is_paid_off: isPaid,
           production_notes: productionNotes,
-          pricing_config: { priceAdult, priceKid, pricePants, feeLongSleeve, feeJumbo, discountAmount },
+          catatan_desain: catatanDesain.trim(),
+          link_drive_aset: linkDriveAset.trim(),
           is_makloon: isMakloon,
           makloon_vendor_name: isMakloon ? makloonVendorName.trim() : null
         })
@@ -452,7 +453,7 @@ export default function OrderDetailPage() {
 
       if (oErr) throw oErr
 
-      setMsg("Data pesanan dan matriks ukuran berhasil diperbarui!")
+      setMsg("Data pesanan dan kalkulasi harga berhasil disimpan!")
     } catch (err: any) {
       setMsg("Gagal menyimpan: " + err.message)
     } finally {
@@ -466,6 +467,7 @@ export default function OrderDetailPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-4 pb-12">
+      {/* 1. Header & Navigasi */}
       <div className="flex items-center justify-between border-b border-zinc-200 pb-3">
         <div className="flex items-center gap-3">
           <Link
@@ -522,7 +524,7 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {/* Visual Stepper 8 Tahap */}
+      {/* 2. Visual Stepper 8 Tahap Produksi */}
       <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
@@ -591,7 +593,7 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
-      {/* Galeri Mockup Desain (3 Slot) */}
+      {/* 3. Galeri Mockup Desain (3 Slot) */}
       <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
         <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
           <ImageIcon className="h-3.5 w-3.5 text-zinc-600" /> Galeri Mockup Desain (Maksimal 3 Gambar)
@@ -704,7 +706,20 @@ export default function OrderDetailPage() {
                 />
               </div>
 
-              {/* TIPE ORDER: FULL ORDER vs PRINT PRESS */}
+              {/* PRIORITAS PENGERJAAN DENGAN IKON & LABEL LENGKAP */}
+              <div>
+                <label className="block text-zinc-600 font-medium mb-1">Prioritas Pengerjaan</label>
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white font-semibold text-xs"
+                >
+                  <option value="NORMAL">🟢 Reguler / Standar (Normal)</option>
+                  <option value="HIGH">⚡ Express / Kilat (Prioritas Tinggi)</option>
+                  <option value="URGENT">🔥 Super Express / Urgent (Darurat)</option>
+                </select>
+              </div>
+
               <div className="pt-1 border-t border-zinc-100">
                 <label className="block text-zinc-700 font-bold mb-1 text-[11px]">Tipe Pengerjaan Order</label>
                 <div className="grid grid-cols-2 gap-1.5">
@@ -740,7 +755,7 @@ export default function OrderDetailPage() {
             <div className="space-y-2 text-xs">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-zinc-600 font-medium mb-0.5">Bahan Kain</label>
+                  <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">Bahan Kain</label>
                   <select
                     value={fabricType}
                     onChange={(e) => setFabricType(e.target.value)}
@@ -750,7 +765,7 @@ export default function OrderDetailPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-zinc-600 font-medium mb-0.5">Model Kerah</label>
+                  <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">Model Kerah</label>
                   <select
                     value={collarType}
                     onChange={(e) => setCollarType(e.target.value)}
@@ -761,7 +776,6 @@ export default function OrderDetailPage() {
                 </div>
               </div>
 
-              {/* Paket & Tinta */}
               <div className="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-100">
                 <div>
                   <label className="block text-zinc-700 font-bold mb-1 text-[11px]">Pilihan Paket</label>
@@ -816,7 +830,6 @@ export default function OrderDetailPage() {
                 </div>
               </div>
 
-              {/* Lokasi Desain & Potong */}
               <div className="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-100 text-[10.5px]">
                 <div>
                   <span className="text-zinc-600 font-medium block">Desain/Setting:</span>
@@ -855,49 +868,69 @@ export default function OrderDetailPage() {
             </div>
           </div>
 
-          <div className="border border-zinc-200 bg-white p-3 rounded shadow-2xs space-y-2">
-            <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5">
-              <DollarSign className="h-3.5 w-3.5 text-zinc-500" /> Biaya & Pembayaran
-            </span>
-            <div className="space-y-1.5 text-xs">
-              <div>
-                <label className="block text-zinc-600 font-semibold mb-0.5">Total Qty (Pcs)</label>
-                <div className="w-full py-1 px-2 border-2 border-zinc-900 rounded font-mono font-bold text-zinc-900 bg-zinc-100 text-center text-xs">
-                  {matrixTotals.totalOrderQty} pcs
+          {/* Kolom 3: Biaya & Pembayaran (Kalkulator Cerdas Mekanisme B) */}
+          <div className="border border-zinc-200 bg-white p-3 rounded shadow-2xs space-y-2 flex flex-col justify-between">
+            <div>
+              <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5 mb-1.5 border-b border-zinc-100 pb-1.5">
+                <DollarSign className="h-3.5 w-3.5 text-zinc-500" /> Kalkulator Harga & Pembayaran
+              </span>
+              <div className="space-y-1.5 text-xs">
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div>
+                    <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">Harga Baju Dewasa</label>
+                    <input type="text" placeholder="0" value={formatRibuan(priceAdult)} onChange={(e) => setPriceAdult(parseRibuan(e.target.value))} className="w-full px-2 py-1 border border-zinc-300 rounded font-mono focus:ring-1 focus:ring-zinc-900 focus:outline-none text-xs" />
+                  </div>
+                  <div>
+                    <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">Harga Baju Anak</label>
+                    <input type="text" placeholder="0" value={formatRibuan(priceKid)} onChange={(e) => setPriceKid(parseRibuan(e.target.value))} className="w-full px-2 py-1 border border-zinc-300 rounded font-mono focus:ring-1 focus:ring-zinc-900 focus:outline-none text-xs" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5 border-t border-zinc-100 pt-1">
+                  <div>
+                    <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">+ Lengan Panjang</label>
+                    <input type="text" placeholder="0" value={formatRibuan(feeLongSleeve)} onChange={(e) => setFeeLongSleeve(parseRibuan(e.target.value))} className="w-full px-2 py-1 border border-zinc-300 rounded font-mono focus:ring-1 focus:ring-zinc-900 focus:outline-none text-xs" />
+                  </div>
+                  <div>
+                    <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">+ Jumbo (2XL+)</label>
+                    <input type="text" placeholder="0" value={formatRibuan(feeJumbo)} onChange={(e) => setFeeJumbo(parseRibuan(e.target.value))} className="w-full px-2 py-1 border border-zinc-300 rounded font-mono focus:ring-1 focus:ring-zinc-900 focus:outline-none text-xs" />
+                  </div>
+                  {packageType === "STELAN" && (
+                    <div className="col-span-2 bg-purple-50 p-1 rounded border border-purple-100">
+                      <label className="block text-purple-800 font-bold mb-0.5 text-[10px]">Harga Celana / Pcs</label>
+                      <input type="text" placeholder="0" value={formatRibuan(pricePants)} onChange={(e) => setPricePants(parseRibuan(e.target.value))} className="w-full px-2 py-0.5 border border-purple-300 rounded font-mono text-purple-900 focus:ring-1 focus:ring-purple-600 focus:outline-none text-xs" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5 border-t border-zinc-800 pt-1.5 mt-0.5">
+                  <div>
+                    <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">Diskon (Rp)</label>
+                    <input type="text" placeholder="0" value={formatRibuan(discountAmount)} onChange={(e) => setDiscountAmount(parseRibuan(e.target.value))} className="w-full px-2 py-1 border border-zinc-300 rounded font-mono text-red-600 font-bold focus:ring-1 focus:ring-red-600 focus:outline-none text-xs" />
+                  </div>
+                  <div>
+                    <label className="block text-zinc-900 font-bold mb-0.5 text-[10px]">TOTAL TAGIHAN (Rp)</label>
+                    <input type="text" readOnly value={formatRibuan(totalPrice)} className="w-full px-2 py-1 border-2 border-zinc-900 rounded font-mono font-black bg-zinc-100 text-zinc-900 cursor-not-allowed text-xs" />
+                  </div>
+                </div>
+
+                <div className="pt-0.5">
+                  <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">Uang Muka / DP (Rp)</label>
+                  <input type="text" placeholder="0" value={formatRibuan(downPayment)} onChange={(e) => setDownPayment(parseRibuan(e.target.value))} className="w-full px-2 py-1 border border-zinc-300 rounded font-mono font-bold text-emerald-700 focus:ring-1 focus:ring-emerald-600 focus:outline-none text-xs" />
                 </div>
               </div>
+            </div>
 
-              <div>
-                <label className="block text-zinc-600 font-medium mb-0.5">Total Tagihan (Rp)</label>
-                <input
-                  type="text"
-                  value={formatRibuan(totalPrice)}
-                  onChange={(e) => setTotalPrice(parseRibuan(e.target.value))}
-                  className="w-full px-2 py-1 border border-zinc-300 rounded font-mono text-xs font-bold bg-zinc-50"
-                />
-              </div>
-
-              <div>
-                <label className="block text-zinc-600 font-medium mb-0.5">Uang Masuk / DP (Rp)</label>
-                <input
-                  type="text"
-                  value={formatRibuan(downPayment)}
-                  onChange={(e) => setDownPayment(parseRibuan(e.target.value))}
-                  className="w-full px-2 py-1 border border-zinc-300 rounded font-mono text-xs text-emerald-700 font-semibold"
-                />
-              </div>
-
-              <div className="pt-1.5 border-t flex justify-between items-center text-xs">
-                <span className="text-zinc-600 font-medium">Sisa Piutang:</span>
-                <span className="font-bold font-mono text-sm text-red-600">
-                  Rp {sisaPiutang.toLocaleString("id-ID")}
-                </span>
-              </div>
+            <div className="pt-1.5 border-t border-zinc-200 flex justify-between items-center text-xs mt-auto">
+              <span className="text-zinc-600 font-bold">SISA TAGIHAN:</span>
+              <span className="font-black font-mono text-sm text-red-600">
+                Rp {sisaPiutang.toLocaleString("id-ID")}
+              </span>
             </div>
           </div>
         </div>
 
-        {/* MATRIKS UKURAN: DEWASA & ANAK */}
+        {/* MATRIKS UKURAN: ANAK (KIRI) & DEWASA (KANAN) */}
         <div className="border border-zinc-200 bg-white rounded p-3.5 shadow-2xs space-y-3">
           <div className="flex items-center justify-between border-b border-zinc-200 pb-2">
             <div>
@@ -1086,7 +1119,7 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* WADAH FLEKSIBEL ROSTER: WA TEXT & 2 SCREENSHOT */}
+        {/* WADAH FLEKSIBEL ROSTER: WA TEXT & 2 SLOT SCREENSHOT */}
         <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
           <div className="border-b border-zinc-200 pb-2">
             <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
@@ -1101,14 +1134,13 @@ export default function OrderDetailPage() {
               </label>
               <textarea
                 rows={5}
+                placeholder="Paste chat WhatsApp konsumen di sini..."
                 value={rosterWaText}
                 onChange={(e) => setRosterWaText(e.target.value)}
-                placeholder="Paste daftar nama/nomor pemain di sini..."
                 className="w-full p-2.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-zinc-50/50 text-zinc-800 leading-relaxed"
               />
             </div>
 
-            {/* 2 Slot Screenshot */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
               <div className="space-y-1">
                 <span className="block text-xs font-semibold text-zinc-700">Screenshot 1</span>
@@ -1118,7 +1150,7 @@ export default function OrderDetailPage() {
                       <span className="font-semibold text-emerald-700">✓ Gambar 1 Siap</span>
                       <button
                         type="button"
-                        onClick={() => handleDeleteScreenshot(1)}
+                        onClick={() => setRosterScreenshotUrl(null)}
                         className="text-zinc-400 hover:text-red-600 p-0.5"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -1153,7 +1185,7 @@ export default function OrderDetailPage() {
                       <span className="font-semibold text-emerald-700">✓ Gambar 2 Siap</span>
                       <button
                         type="button"
-                        onClick={() => handleDeleteScreenshot(2)}
+                        onClick={() => setRosterScreenshotUrl2(null)}
                         className="text-zinc-400 hover:text-red-600 p-0.5"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -1225,9 +1257,7 @@ export default function OrderDetailPage() {
                   </Link>
                 </div>
 
-                {loadingPartners ? (
-                  <div className="text-zinc-400 font-mono text-[11px] py-1.5">Memuat partner...</div>
-                ) : partnerList.length > 0 ? (
+                {partnerList.length > 0 ? (
                   <select
                     value={makloonVendorName}
                     onChange={(e) => setMakloonVendorName(e.target.value)}
@@ -1254,18 +1284,40 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* CATATAN TEKNIS */}
-        <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-2">
-          <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5">
-            <FileText className="h-3.5 w-3.5 text-zinc-500" /> Catatan Teknis & Instruksi Produksi
-          </span>
-          <textarea
-            rows={3}
-            value={productionNotes}
-            onChange={(e) => setProductionNotes(e.target.value)}
-            placeholder="Instruksi tambahan untuk penjahit atau pemotong kain..."
-            className="w-full p-2.5 border border-zinc-300 rounded text-xs focus:ring-1 focus:ring-zinc-900 focus:outline-none text-zinc-800 leading-relaxed placeholder:text-zinc-400"
-          />
+        {/* CATATAN TEKNIS & BRIEF DESAIN */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-2">
+            <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight">
+              Catatan Teknis & Instruksi Produksi
+            </span>
+            <textarea
+              rows={3}
+              value={productionNotes}
+              onChange={(e) => setProductionNotes(e.target.value)}
+              placeholder="Instruksi untuk bagian potong atau penjahit..."
+              className="w-full p-2.5 border border-zinc-300 rounded text-xs focus:ring-1 focus:ring-zinc-900 focus:outline-none text-zinc-800 leading-relaxed placeholder:text-zinc-400"
+            />
+          </div>
+
+          <div className="border border-purple-200 bg-purple-50/30 p-3.5 rounded shadow-2xs space-y-2">
+            <span className="text-xs font-bold text-purple-950 uppercase tracking-tight">
+              Instruksi Setting Desain & Link Aset (Opsional)
+            </span>
+            <input
+              type="text"
+              placeholder="Link folder Google Drive / server lokal..."
+              value={linkDriveAset}
+              onChange={(e) => setLinkDriveAset(e.target.value)}
+              className="w-full px-2.5 py-1.5 border border-zinc-300 rounded text-xs font-mono focus:ring-1 focus:ring-purple-900 focus:outline-none bg-white"
+            />
+            <textarea
+              rows={2}
+              placeholder="Brief motif warna/settingan..."
+              value={catatanDesain}
+              onChange={(e) => setCatatanDesain(e.target.value)}
+              className="w-full p-2 border border-zinc-300 rounded text-xs focus:ring-1 focus:ring-purple-900 focus:outline-none bg-white text-zinc-800"
+            />
+          </div>
         </div>
 
         {/* Tombol Simpan */}
@@ -1274,7 +1326,7 @@ export default function OrderDetailPage() {
             href="/orders"
             className="px-4 py-2 text-xs font-medium border border-zinc-300 rounded hover:bg-zinc-100 text-zinc-700 transition-colors"
           >
-            Kembali
+            Batal
           </Link>
           <button
             type="submit"
@@ -1282,7 +1334,7 @@ export default function OrderDetailPage() {
             className="inline-flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold px-5 py-2 rounded shadow-sm transition-colors disabled:opacity-50"
           >
             <Save className="h-3.5 w-3.5" />
-            {saving ? "Menyimpan Perubahan..." : "Simpan Pembaruan Data"}
+            {saving ? "Menyimpan Pesanan..." : "Simpan Pesanan"}
           </button>
         </div>
       </form>

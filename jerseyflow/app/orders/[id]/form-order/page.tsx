@@ -273,8 +273,14 @@ export default function FormOrderPrintPage() {
               <div>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-xl font-black tracking-tight uppercase">FORM ORDER & ACC DESAIN</span>
-                  <span className="border border-black bg-zinc-100 font-bold px-1.5 py-0.5 text-[9px] uppercase">
-                    {order.priority}
+                  <span className={`border px-1.5 py-0.5 text-[9px] font-black uppercase ${
+                    order.priority === "URGENT"
+                      ? "border-black bg-black text-white"
+                      : order.priority === "HIGH"
+                      ? "border-black bg-zinc-800 text-white"
+                      : "border-black bg-zinc-100 text-zinc-900"
+                  }`}>
+                    {order.priority === "URGENT" ? "🔥 SUPER URGENT" : order.priority === "HIGH" ? "⚡ LAYANAN KILAT" : "REGULER"}
                   </span>
                   <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${
                     isPrintPress ? "border-black bg-black text-white" : "border-black bg-zinc-200 text-black"

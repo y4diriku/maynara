@@ -123,6 +123,7 @@ export default function OrdersListPage() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
   })
   const [orderTypeFilter, setOrderTypeFilter] = useState<OrderTypeFilter>("ALL")
+  const [priorityFilter, setPriorityFilter] = useState<"ALL" | "EXPRESS_ALL" | "URGENT" | "HIGH" | "NORMAL">("ALL")
 
   // EXPANDABLE REPORTS
   const [showExtraReports, setShowExtraReports] = useState(false)
@@ -217,6 +218,12 @@ export default function OrdersListPage() {
         if (orderTypeFilter === "PRINT_PRESS" && o.order_type !== "PRINT_PRESS") return false
       }
 
+      // Filter Prioritas Layanan
+      if (priorityFilter === "NORMAL" && o.priority !== "NORMAL") return false
+      if (priorityFilter === "EXPRESS_ALL" && o.priority !== "HIGH" && o.priority !== "URGENT") return false
+      if (priorityFilter === "URGENT" && o.priority !== "URGENT") return false
+      if (priorityFilter === "HIGH" && o.priority !== "HIGH") return false
+
       const sisaTagihan = Number(o.total_price || 0) - Number(o.down_payment || 0)
 
       // Tab Filter + Date Constraint
@@ -242,7 +249,7 @@ export default function OrdersListPage() {
         o.customer_name.toLowerCase().includes(q)
       )
     })
-  }, [orders, activeTab, period, customMonth, query, orderTypeFilter])
+  }, [orders, activeTab, period, customMonth, query, orderTypeFilter, priorityFilter])
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-12">
@@ -408,6 +415,17 @@ export default function OrdersListPage() {
                 <option value="PRINT_PRESS">Print + Press Saja</option>
               </select>
             </div>
+
+            <div className="flex items-center gap-1.5 bg-zinc-50 border border-zinc-200 rounded px-2.5 py-1 text-xs">
+              <span className="text-[11px]">⚡🔥</span>
+              <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value as any)} className="bg-transparent font-medium text-zinc-800 focus:outline-none cursor-pointer">
+                <option value="ALL">Semua Prioritas</option>
+                <option value="EXPRESS_ALL">⚡🔥 Semua Prioritas Kilat</option>
+                <option value="URGENT">🔥 Super Urgent Saja</option>
+                <option value="HIGH">⚡ Express / Kilat Saja</option>
+                <option value="NORMAL">🟢 Reguler Saja</option>
+              </select>
+            </div>
             
             <div className="flex items-center gap-1.5 bg-zinc-50 border border-zinc-200 rounded px-2.5 py-1 text-xs">
               <Calendar className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
@@ -463,11 +481,23 @@ export default function OrdersListPage() {
 
                   return (
                     <tr key={o.id} className="hover:bg-zinc-50 transition-colors">
-                      {/* Kolom 1: No Order */}
+                      {/* Kolom 1: No Order & Badge Prioritas */}
                       <td className="py-3 px-4">
-                        <Link href={`/orders/${o.id}`} className="font-mono font-black text-zinc-900 hover:text-blue-600 hover:underline">
-                          {o.order_number}
-                        </Link>
+                        <div className="flex items-center gap-1.5">
+                          <Link href={`/orders/${o.id}`} className="font-mono font-black text-zinc-900 hover:text-blue-600 hover:underline">
+                            {o.order_number}
+                          </Link>
+                          {o.priority === "URGENT" && (
+                            <span className="text-[8px] font-black bg-red-600 text-white px-1.5 py-0.2 rounded font-sans tracking-tight shrink-0 animate-pulse">
+                              🔥 URGENT
+                            </span>
+                          )}
+                          {o.priority === "HIGH" && (
+                            <span className="text-[8px] font-black bg-amber-500 text-white px-1.5 py-0.2 rounded font-sans tracking-tight shrink-0">
+                              ⚡ KILAT
+                            </span>
+                          )}
+                        </div>
                         <span className="block text-[9px] text-zinc-400 font-mono mt-0.5">Dibuat: {formatDateID(o.created_at)}</span>
                       </td>
 
