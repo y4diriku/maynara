@@ -27,11 +27,11 @@ interface Order {
   customer_phone?: string | null
   total_qty: number
   fabric_type: string
-  collar_type: string
+  collar_type?: string | null
   current_status: string
   priority: string
   deadline_date: string
-  created_at: string
+  created_at?: string | null
   down_payment: number
   total_price: number
   is_paid_off: boolean
@@ -102,13 +102,13 @@ export default function KanbanDashboard() {
     try {
       const { data, error } = await supabase
         .from("orders")
-        .select("id, order_number, order_title, created_by_name, customer_name, total_qty, fabric_type, current_status, priority, deadline_date, total_price, down_payment, is_paid_off")
+        .select("id, order_number, order_title, created_by_name, customer_name, total_qty, fabric_type, collar_type, current_status, priority, deadline_date, created_at, total_price, down_payment, is_paid_off")
         .neq("current_status", "COMPLETED")
         .neq("current_status", "CANCELLED")
         .order("deadline_date", { ascending: true })
 
       if (!error && data) {
-        setOrders(data)
+        setOrders(data as Order[])
         try {
           localStorage.setItem("manayra_cached_orders", JSON.stringify(data))
         } catch {}
