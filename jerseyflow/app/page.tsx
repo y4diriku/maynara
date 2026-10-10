@@ -101,7 +101,7 @@ export default function KanbanDashboard() {
     try {
       const { data, error } = await supabase
         .from("orders")
-        .select("*")
+        .select("id, order_number, order_title, created_by_name, customer_name, total_qty, fabric_type, current_status, priority, deadline_date, total_price, down_payment, is_paid_off")
         .neq("current_status", "COMPLETED")
         .neq("current_status", "CANCELLED")
         .order("deadline_date", { ascending: true })
