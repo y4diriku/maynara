@@ -22,7 +22,8 @@ import {
   Check,
   CheckCircle2,
   Clock,
-  Lock
+  Lock,
+  AlertTriangle
 } from "lucide-react"
 
 interface PartnerItem {
@@ -86,6 +87,9 @@ export default function OrderDetailPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState("")
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancelReason, setCancelReason] = useState("")
+  const [cancelling, setCancelling] = useState(false)
 
   // Identitas & Status
   const [orderNumber, setOrderNumber] = useState("")
@@ -296,6 +300,8 @@ export default function OrderDetailPage() {
   }, [totalPrice, downPayment])
 
   const isArchived = currentStatus === "COMPLETED"
+  const isCancelled = currentStatus === "CANCELLED"
+  const isLocked = isArchived || isCancelled
 
   const activeStageIndex = useMemo(() => {
     if (currentStatus === "COMPLETED") return 8
@@ -464,6 +470,40 @@ export default function OrderDetailPage() {
     }
   }
 
+  const handleCancelOrder = async () => {
+    if (!cancelReason.trim()) {
+      alert("Alasan pembatalan wajib diisi.")
+      return
+    }
+    setCancelling(true)
+    try {
+      const { error: cancelErr } = await supabase
+        .from("orders")
+        .update({
+          current_status: "CANCELLED",
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", orderId)
+
+      if (cancelErr) throw cancelErr
+
+      await supabase.from("production_logs").insert({
+        order_id: orderId,
+        stage: "CANCELLED",
+        notes: `Pesanan dibatalkan. Alasan: ${cancelReason.trim()}`,
+        operator_name: "Admin / Owner"
+      })
+
+      setCurrentStatus("CANCELLED")
+      setShowCancelModal(false)
+      setMsg("Pesanan berhasil dibatalkan dan telah resmi dikeluarkan dari antrean Kanban.")
+    } catch (err: any) {
+      alert("Gagal membatalkan pesanan: " + err.message)
+    } finally {
+      setCancelling(false)
+    }
+  }
+
   if (loading) {
     return <div className="p-8 text-center text-xs font-mono">Memuat detail pesanan...</div>
   }
@@ -524,6 +564,22 @@ export default function OrderDetailPage() {
         }`}>
           {msg.includes("berhasil") ? <CheckCircle2 className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
           <span>{msg}</span>
+        </div>
+      )}
+
+      {/* BANNER PESANAN DIBATALKAN (CANCELLED) */}
+      {isCancelled && (
+        <div className="bg-red-50 border border-red-200 text-red-950 px-3.5 py-2.5 rounded-lg flex items-center justify-between text-xs shadow-2xs">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-red-600 shrink-0" />
+            <div>
+              <strong className="block font-bold">Pesanan Ini Telah Dibatalkan (CANCELLED)</strong>
+              <span className="text-[11px] text-red-800">Pesanan telah resmi dikeluarkan dari antrean Kanban dan terkunci untuk riwayat arsip.</span>
+            </div>
+          </div>
+          <span className="font-mono text-[9px] font-bold bg-white text-red-800 border border-red-300 px-2 py-0.5 rounded uppercase shrink-0 shadow-2xs">
+            DIBATALKAN
+          </span>
         </div>
       )}
 
@@ -697,7 +753,7 @@ export default function OrderDetailPage() {
       </div>
 
       <form onSubmit={handleSave} className="space-y-4">
-        <fieldset disabled={isArchived} className="space-y-4 border-0 p-0 m-0 disabled:opacity-90 contents">
+        <fieldset disabled={isLocked} className="space-y-4 border-0 p-0 m-0 disabled:opacity-90 contents">
         {/* Parameter Utama 3 Kolom */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
@@ -1361,19 +1417,77 @@ export default function OrderDetailPage() {
               {isArchived ? "Kembali ke Daftar Pesanan" : "Kembali"}
             </Link>
 
-            {!isArchived && (
-              <button
-                type="submit"
-                disabled={saving}
-                className="inline-flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold px-5 py-2 rounded shadow-sm transition-colors disabled:opacity-50"
-              >
-                <Save className="h-3.5 w-3.5" />
-                {saving ? "Menyimpan Perubahan..." : "Simpan Pembaruan Data"}
-              </button>
+            {!isLocked && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowCancelModal(true)}
+                  className="px-3 py-2 text-xs font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 rounded border border-red-200 transition-colors"
+                >
+                  Batalkan Pesanan
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="inline-flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold px-5 py-2 rounded shadow-sm transition-colors disabled:opacity-50"
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  {saving ? "Menyimpan Perubahan..." : "Simpan Pembaruan Data"}
+                </button>
+              </>
             )}
           </div>
         </div>
 </form>
+      {/* MODAL DIALOG KONFIRMASI PEMBATALAN PESANAN */}
+      {showCancelModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-zinc-200 rounded-lg shadow-xl max-w-sm w-full p-4 space-y-3.5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
+              <div className="flex items-center gap-1.5 text-red-600 font-bold text-xs">
+                <AlertTriangle className="h-4 w-4" />
+                <span>Konfirmasi Pembatalan Pesanan</span>
+              </div>
+              <button type="button" onClick={() => setShowCancelModal(false)} className="p-1 text-zinc-400 hover:text-zinc-700 rounded">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-600 leading-relaxed">
+              Pesanan <strong className="text-zinc-900 font-mono">{orderNumber}</strong> ({orderTitle || customerName}) akan dihentikan dan dikeluarkan dari papan produksi Kanban.
+            </p>
+
+            <div className="space-y-1">
+              <label className="block text-[11px] font-bold text-zinc-700">Alasan Pembatalan (Wajib):</label>
+              <textarea
+                rows={3}
+                placeholder="Contoh: Konsumen membatalkan sepihak, DP Rp 300.000 hangus..."
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                className="w-full p-2 border border-zinc-300 rounded text-xs focus:ring-1 focus:ring-red-600 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1 border-t border-zinc-100">
+              <button
+                type="button"
+                onClick={() => setShowCancelModal(false)}
+                className="px-3 py-1.5 border border-zinc-200 rounded text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+              >
+                Kembali
+              </button>
+              <button
+                type="button"
+                disabled={cancelling || !cancelReason.trim()}
+                onClick={handleCancelOrder}
+                className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-bold transition-colors disabled:opacity-50 shadow-2xs"
+              >
+                {cancelling ? "Membatalkan..." : "Ya, Batalkan Pesanan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

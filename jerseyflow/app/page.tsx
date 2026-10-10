@@ -80,6 +80,7 @@ export default function KanbanDashboard() {
   const [archiveModalOrder, setArchiveModalOrder] = useState<Order | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [userRole, setUserRole] = useState<string>("")
+  const [isOnline, setIsOnline] = useState<boolean>(true)
 
   // 1. Instant Cache Hydration
   useEffect(() => {
@@ -132,6 +133,20 @@ export default function KanbanDashboard() {
     fetchUserRole()
     fetchOrders()
 
+    const handleOnline = () => {
+      setIsOnline(true)
+      fetchOrders(true) // Auto-sync data terbaru begitu internet menyala
+    }
+    const handleOffline = () => {
+      setIsOnline(false)
+    }
+
+    if (typeof window !== "undefined") {
+      setIsOnline(navigator.onLine)
+      window.addEventListener("online", handleOnline)
+      window.addEventListener("offline", handleOffline)
+    }
+
     const channel = supabase
       .channel("orders_realtime_board_8stages")
       .on(
@@ -144,6 +159,10 @@ export default function KanbanDashboard() {
       .subscribe()
 
     return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("online", handleOnline)
+        window.removeEventListener("offline", handleOffline)
+      }
       supabase.removeChannel(channel)
     }
   }, [])
@@ -165,16 +184,25 @@ export default function KanbanDashboard() {
       return updated
     })
 
-    await supabase
-      .from("orders")
-      .update({ current_status: targetStage })
-      .eq("id", orderId)
+    try {
+      const { error: stageErr } = await supabase
+        .from("orders")
+        .update({ current_status: targetStage })
+        .eq("id", orderId)
 
-    await supabase.from("production_logs").insert({
-      order_id: orderId,
-      stage: targetStage,
-      notes: "Dipindahkan ke " + STAGES[targetIndex].label
-    })
+      if (stageErr) throw stageErr
+
+      await supabase.from("production_logs").insert({
+        order_id: orderId,
+        stage: targetStage,
+        notes: "Dipindahkan ke " + STAGES[targetIndex].label,
+        operator_name: userRole || "Operator"
+      })
+    } catch (err: any) {
+      console.error("Gagal update stage:", err)
+      alert("Gagal memindahkan kartu. Koneksi internet mungkin terputus. Mengembalikan posisi kartu...")
+      fetchOrders()
+    }
   }
 
   // 4. Eksekusi Penyerahan Kasir & Pelunasan
@@ -328,6 +356,19 @@ export default function KanbanDashboard() {
         </div>
 
         <div className="flex items-center gap-3 text-xs">
+          {/* Indikator Status Jaringan Workshop */}
+          <div className="flex items-center">
+            {isOnline ? (
+              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 font-mono font-bold bg-emerald-50/80 border border-emerald-200 px-1.5 py-0.5 rounded shadow-2xs">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[10px] text-red-600 font-mono font-bold bg-red-50 border border-red-200 px-1.5 py-0.5 rounded animate-bounce shadow-2xs">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-500" /> Offline
+              </span>
+            )}
+          </div>
+          <div className="h-3 w-px bg-zinc-200" />
           <span className="text-zinc-500">
             Total WIP: <strong className="text-zinc-900 font-mono">{orders.length}</strong> Order
           </span>

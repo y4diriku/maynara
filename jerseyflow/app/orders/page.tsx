@@ -150,7 +150,7 @@ export default function OrdersListPage() {
   const loadOrders = async (showSpinner = false) => {
     if (showSpinner) setIsRefreshing(true)
     try {
-      const { data, error } = await supabase.from("orders").select("*").order("created_at", { ascending: false })
+      const { data, error } = await supabase.from("orders").select("id, order_number, order_title, customer_name, total_qty, fabric_type, current_status, priority, deadline_date, created_at, updated_at, total_price, down_payment, is_paid_off, order_type").order("created_at", { ascending: false })
       if (!error && data) setOrders(data)
     } catch (err) {} finally {
       setLoading(false)
