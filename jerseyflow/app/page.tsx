@@ -14,7 +14,8 @@ import {
   AlertTriangle,
   X,
   Banknote,
-  Calendar
+  Calendar,
+  Lock
 } from "lucide-react"
 
 interface Order {
@@ -74,6 +75,7 @@ export default function KanbanDashboard() {
 
   const [archiveModalOrder, setArchiveModalOrder] = useState<Order | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [userRole, setUserRole] = useState<string>("")
 
   useEffect(() => {
     try {
@@ -113,6 +115,14 @@ export default function KanbanDashboard() {
   }
 
   useEffect(() => {
+    async function fetchUserRole() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        const { data: prof } = await supabase.from("profiles").select("role").eq("id", session.user.id).single()
+        if (prof?.role) setUserRole(prof.role.toUpperCase())
+      }
+    }
+    fetchUserRole()
     fetchOrders()
 
     const channel = supabase

@@ -136,7 +136,7 @@ export default function AnalyticsPage() {
         .single()
 
       const userRole = (profile?.role || "ADMIN").toUpperCase()
-      if (userRole !== "OWNER") {
+      if (userRole !== "OWNER" && userRole !== "ACCOUNTING") {
         router.replace("/")
         return
       }
