@@ -21,7 +21,8 @@ import {
   Users2,
   Check,
   CheckCircle2,
-  Clock
+  Clock,
+  Lock
 } from "lucide-react"
 
 interface PartnerItem {
@@ -294,6 +295,8 @@ export default function OrderDetailPage() {
     return sisa > 0 ? sisa : 0
   }, [totalPrice, downPayment])
 
+  const isArchived = currentStatus === "COMPLETED"
+
   const activeStageIndex = useMemo(() => {
     if (currentStatus === "COMPLETED") return 8
     return STAGES.findIndex((s) => s.key === currentStatus)
@@ -524,6 +527,22 @@ export default function OrderDetailPage() {
         </div>
       )}
 
+      {/* BANNER PESANAN TERKUNCI DALAM ARSIP (READ-ONLY) */}
+      {isArchived && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-950 px-3.5 py-2.5 rounded-lg flex items-center justify-between text-xs shadow-2xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+            <div>
+              <strong className="block font-bold">Pesanan Telah Selesai & Terkunci dalam Arsip (Read-Only)</strong>
+              <span className="text-[11px] text-emerald-800">Seluruh spesifikasi, matriks ukuran, dan data keuangan dikunci permanen demi menjaga integritas pembukuan workshop.</span>
+            </div>
+          </div>
+          <span className="font-mono text-[9px] font-bold bg-white text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded uppercase shrink-0 shadow-2xs">
+            ARSIP TERKUNCI
+          </span>
+        </div>
+      )}
+
       {/* 2. Visual Stepper 8 Tahap Produksi */}
       <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
         <div className="flex items-center justify-between">
@@ -678,6 +697,7 @@ export default function OrderDetailPage() {
       </div>
 
       <form onSubmit={handleSave} className="space-y-4">
+        <fieldset disabled={isArchived} className="space-y-4 border-0 p-0 m-0 disabled:opacity-90 contents">
         {/* Parameter Utama 3 Kolom */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
@@ -1320,24 +1340,40 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* Tombol Simpan */}
-        <div className="flex justify-end gap-3 pt-2">
-          <Link
-            href="/orders"
-            className="px-4 py-2 text-xs font-medium border border-zinc-300 rounded hover:bg-zinc-100 text-zinc-700 transition-colors"
-          >
-            Batal
-          </Link>
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold px-5 py-2 rounded shadow-sm transition-colors disabled:opacity-50"
-          >
-            <Save className="h-3.5 w-3.5" />
-            {saving ? "Menyimpan Pesanan..." : "Simpan Pesanan"}
-          </button>
+                </fieldset>
+
+        {/* Tombol Aksi / Simpan */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-zinc-200">
+          {isArchived ? (
+            <div className="flex items-center gap-1.5 text-xs text-zinc-500 font-medium">
+              <Lock className="h-3.5 w-3.5 text-zinc-400" />
+              <span>Mode Arsip: Dokumen terkunci untuk audit & hanya dapat dicetak ulang.</span>
+            </div>
+          ) : (
+            <div />
+          )}
+
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <Link
+              href="/orders"
+              className="px-4 py-2 text-xs font-medium border border-zinc-300 rounded hover:bg-zinc-100 text-zinc-700 transition-colors"
+            >
+              {isArchived ? "Kembali ke Daftar Pesanan" : "Kembali"}
+            </Link>
+
+            {!isArchived && (
+              <button
+                type="submit"
+                disabled={saving}
+                className="inline-flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold px-5 py-2 rounded shadow-sm transition-colors disabled:opacity-50"
+              >
+                <Save className="h-3.5 w-3.5" />
+                {saving ? "Menyimpan Perubahan..." : "Simpan Pembaruan Data"}
+              </button>
+            )}
+          </div>
         </div>
-      </form>
+</form>
     </div>
   )
 }

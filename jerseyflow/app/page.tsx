@@ -57,6 +57,7 @@ function formatIDR(amount: number): string {
   }).format(amount)
 }
 
+// 8 POS PRODUKSI LENGKAP
 const STAGES = [
   { key: "DESIGN_QUEUE", label: "Antrean Desain", code: "01", accent: "bg-blue-600" },
   { key: "PRINTING", label: "Print Sublim", code: "02", accent: "bg-indigo-600" },
@@ -75,10 +76,12 @@ export default function KanbanDashboard() {
   const [filterQuery, setFilterQuery] = useState("")
   const [priorityMode, setPriorityMode] = useState(false)
 
+  // State Modal Penyerahan Kasir
   const [archiveModalOrder, setArchiveModalOrder] = useState<Order | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [userRole, setUserRole] = useState<string>("")
 
+  // 1. Instant Cache Hydration
   useEffect(() => {
     try {
       const cached = localStorage.getItem("manayra_cached_orders")
@@ -92,6 +95,7 @@ export default function KanbanDashboard() {
     } catch {}
   }, [])
 
+  // 2. Fetch Data dari Supabase
   const fetchOrders = async (showSpinner = false) => {
     if (showSpinner) setIsRefreshing(true)
     try {
@@ -116,6 +120,7 @@ export default function KanbanDashboard() {
     }
   }
 
+  // 3. Cek Role Akun Login & Pasang Realtime Listener
   useEffect(() => {
     async function fetchUserRole() {
       const { data: { session } } = await supabase.auth.getSession()
@@ -172,6 +177,7 @@ export default function KanbanDashboard() {
     })
   }
 
+  // 4. Eksekusi Penyerahan Kasir & Pelunasan
   const handleExecuteArchive = async (markAsPaid: boolean) => {
     if (!archiveModalOrder) return
     setIsSubmitting(true)
@@ -242,10 +248,12 @@ export default function KanbanDashboard() {
     return { label: `${diffDays} hari lagi`, status: "aman" }
   }
 
+  // Hitung jumlah order Prioritas (Express & Urgent)
   const urgentCount = useMemo(() => {
     return orders.filter((o) => o.priority === "HIGH" || o.priority === "URGENT").length
   }, [orders])
 
+  // Filter gabungan (Search + Mode Prioritas)
   const filteredOrders = useMemo(() => {
     const q = filterQuery.toLowerCase().trim()
     return orders.filter((o) => {
@@ -281,6 +289,8 @@ export default function KanbanDashboard() {
           >
             <RefreshCw className={isRefreshing ? "h-3.5 w-3.5 animate-spin text-zinc-900" : "h-3.5 w-3.5"} />
           </button>
+
+          {/* Tombol Cerdas: ⚡🔥 Filter Prioritas */}
           <button
             type="button"
             onClick={() => setPriorityMode(!priorityMode)}
@@ -305,6 +315,7 @@ export default function KanbanDashboard() {
               {urgentCount}
             </span>
           </button>
+
           <div className="h-4 w-px bg-zinc-200 hidden sm:block" />
           <Link
             href="/orders"
@@ -406,11 +417,11 @@ export default function KanbanDashboard() {
                         key={order.id}
                         className={`bg-white border border-zinc-200 ${priorityBorder} rounded p-2 shadow-2xs space-y-1 hover:border-zinc-400 transition-colors`}
                       >
-                        {/* 1. Baris No Order Menjadi Badge Prioritas Langsung + Tooltip Pembuat */}
+                        {/* 1. Baris No Order Menjadi Badge Prioritas + Tooltip Pembuat */}
                         <div className="flex items-center justify-between gap-1 leading-none">
                           <div 
-                            className="flex items-center gap-1 truncate cursor-help" 
-                            title={`Diterbitkan oleh: ${order.created_by_name || "Admin Manayra"}`}
+                            className="flex items-center gap-1 truncate cursor-help"
+                            title={`Diterbitkan oleh (Admin / Setting): ${order.created_by_name || "Admin Manayra"}`}
                           >
                             {isUrgent ? (
                               <span className="bg-red-600 text-white px-1.5 py-0.5 rounded text-[10.5px] font-mono font-black tracking-tight inline-flex items-center gap-1 animate-pulse shadow-2xs">
@@ -433,7 +444,7 @@ export default function KanbanDashboard() {
                           </span>
                         </div>
 
-                        {/* 2. NAMA ORDER: UPPERCASE, BOLD, ERGONOMIS (Nama Pemesan Ditiadakan) */}
+                        {/* 2. NAMA ORDER: UPPERCASE, BOLD */}
                         <p 
                           className="text-[11px] font-bold uppercase tracking-tight text-zinc-800 truncate leading-snug" 
                           title={order.order_title || order.customer_name}
@@ -474,7 +485,7 @@ export default function KanbanDashboard() {
                           )}
                         </div>
 
-                        {/* 4. Footer Aksi Toolbar */}
+                        {/* 4. Footer Aksi: DILINDUNGI GERBANG KASIR */}
                         <div className="pt-1 border-t border-zinc-100 flex items-center justify-between gap-1">
                           <button
                             type="button"
@@ -503,16 +514,29 @@ export default function KanbanDashboard() {
                             <Printer className="h-2.5 w-2.5" />
                           </Link>
 
+                          {/* Tombol Aksi Kanan: Proteksi Role Kasir / Owner */}
                           {isLastStage ? (
-                            <button
-                              type="button"
-                              onClick={() => setArchiveModalOrder(order)}
-                              className="flex-1 h-5 flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[9px] font-bold transition-colors shadow-2xs"
-                              title="Selesaikan & serahkan pesanan"
-                            >
-                              <CheckCircle2 className="h-2.5 w-2.5 shrink-0" />
-                              <span>Selesai</span>
-                            </button>
+                            (userRole === "OWNER" || userRole === "ACCOUNTING") ? (
+                              <button
+                                type="button"
+                                onClick={() => setArchiveModalOrder(order)}
+                                className="flex-1 h-5 flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[9px] font-bold transition-colors shadow-2xs"
+                                title="Selesaikan & serahkan pesanan"
+                              >
+                                <CheckCircle2 className="h-2.5 w-2.5 shrink-0" />
+                                <span>Selesai</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled
+                                className="flex-1 h-5 flex items-center justify-center gap-1 bg-zinc-100 text-zinc-400 border border-zinc-200 rounded text-[8.5px] font-bold cursor-not-allowed"
+                                title="Hanya Admin Keuangan / Owner yang dapat mengonfirmasi penyerahan barang"
+                              >
+                                <Lock className="h-2.5 w-2.5 shrink-0" />
+                                <span>Kasir</span>
+                              </button>
+                            )
                           ) : (
                             <button
                               type="button"
@@ -535,7 +559,7 @@ export default function KanbanDashboard() {
         })}
       </div>
 
-      {/* Modal Dialog Konfirmasi */}
+      {/* Modal Dialog Konfirmasi Serah Terima Kasir */}
       {archiveModalOrder && (() => {
         const modalSisa = Number(archiveModalOrder.total_price || 0) - Number(archiveModalOrder.down_payment || 0)
         const modalIsLunas = archiveModalOrder.is_paid_off || modalSisa <= 0
