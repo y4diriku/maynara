@@ -125,7 +125,7 @@ export default function NewOrderPage() {
     async function initData() {
       const { data: { session } } = await supabase.auth.getSession()
       if (session?.user) {
-        const { data: prof } = await supabase.from("profiles").select("full_name").eq("id", session.user.id).single()
+        const { data: prof } = await supabase.from("profiles").select("full_name, role").eq("id", session.user.id).single()
         if (prof?.full_name) setCurrentAdmin(prof.full_name)
         if (prof?.role) setCurrentAdminRole(prof.role.toUpperCase())
       }
