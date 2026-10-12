@@ -1,5 +1,7 @@
 "use client"
 
+import DisplayScaleWidget from "@/components/DisplayScaleWidget"
+
 import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
@@ -116,6 +118,7 @@ export default function RootLayout({
             </div>
           </div>
         )}
+              <DisplayScaleWidget />
       </body>
     </html>
   )
