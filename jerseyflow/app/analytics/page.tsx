@@ -414,7 +414,7 @@ export default function AnalyticsPage() {
             <span className="text-xs font-bold uppercase tracking-tight text-zinc-900 flex items-center gap-1.5">
               <Scissors className="h-4 w-4 text-zinc-600" /> Kebutuhan Stok Bahan Kain
             </span>
-            <span className="text-[10px] text-zinc-500 font-mono">Untuk Belanja Rol Kain</span>
+            <span className="text-[10px] text-zinc-500 font-mono">Analisis Belanja Kain</span>
           </div>
 
           <div className="space-y-2.5">
@@ -510,7 +510,7 @@ export default function AnalyticsPage() {
       <div className="bg-white border border-zinc-200 rounded p-4 shadow-2xs space-y-3">
         <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
           <span className="text-xs font-bold uppercase tracking-tight text-zinc-900 flex items-center gap-1.5">
-            <PieChart className="h-4 w-4 text-zinc-600" /> Profil Sebaran Ukuran Terpopuler (Pasar Manayra)
+            <PieChart className="h-4 w-4 text-zinc-600" /> Profil Sebaran Ukuran Terpopuler
           </span>
           <span className="text-[10px] text-zinc-500 font-mono">Dihitung dari Matriks Ukuran</span>
         </div>
