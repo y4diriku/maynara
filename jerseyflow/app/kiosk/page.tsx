@@ -520,8 +520,14 @@ function KioskContent() {
                 </span>
                 <strong className="text-sm font-mono tracking-wide">{currentOrder.order_number}</strong>
               </div>
-              <span className="border border-white/30 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
-                {currentOrder.priority}
+              <span className={`px-2 py-0.5 rounded text-[9.5px] font-black uppercase tracking-tight shadow-xs ${
+                currentOrder.priority === "URGENT"
+                  ? "bg-red-600 text-white animate-pulse"
+                  : currentOrder.priority === "HIGH"
+                  ? "bg-amber-500 text-white"
+                  : "bg-white/20 text-white"
+              }`}>
+                {currentOrder.priority === "URGENT" ? "🔥 SUPER URGENT" : currentOrder.priority === "HIGH" ? "⚡ EXPRESS" : "REGULER"}
               </span>
             </div>
 
@@ -553,14 +559,32 @@ function KioskContent() {
               </div>
 
               {/* Posisi Pengerjaan */}
-              <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50 space-y-1">
-                <span className="text-[9px] uppercase font-bold text-zinc-500 block">Posisi Pengerjaan Saat Ini</span>
+              {/* Banner Peringatan Khusus untuk Operator */}
+              {(currentOrder.priority === "URGENT" || currentOrder.priority === "HIGH") && (
+                <div className={`p-2.5 rounded-lg text-xs font-bold flex items-center gap-2 border shadow-2xs ${
+                  currentOrder.priority === "URGENT"
+                    ? "bg-red-50 text-red-700 border-red-200 animate-pulse"
+                    : "bg-amber-50 text-amber-800 border-amber-200"
+                }`}>
+                  <span className="text-sm">{currentOrder.priority === "URGENT" ? "🔥" : "⚡"}</span>
+                  <span>PERHATIAN OPERATOR: Pesanan berstatus {currentOrder.priority === "URGENT" ? "SUPER URGENT (DARURAT)" : "KILAT / EXPRESS"}. Wajib didahulukan prosesnya!</span>
+                </div>
+              )}
+
+              <div className="border border-emerald-300 rounded p-2.5 bg-emerald-50/50 space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono font-bold text-sm text-zinc-900">
+                  <span className="text-[9px] uppercase font-bold text-emerald-800 block">Posisi Pengerjaan Saat Ini</span>
+                  <span className="bg-emerald-600 text-white font-mono text-[9px] font-bold px-1.5 py-0.2 rounded uppercase tracking-wider flex items-center gap-1 shadow-2xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+                    Pos Aktif Sekarang
+                  </span>
+                </div>
+                <div className="flex items-center justify-between pt-0.5">
+                  <span className="font-mono font-black text-sm text-zinc-950">
                     {currentStageConfig?.label || currentOrder.current_status}
                   </span>
-                  <span className="text-[10px] text-zinc-500">
-                    Target berikutnya: <strong className="text-zinc-800">{currentStageConfig?.nextLabel || "Selesai"}</strong>
+                  <span className="text-[10px] text-zinc-600 font-sans">
+                    Target berikutnya: <strong className="text-zinc-900">{currentStageConfig?.nextLabel || "Selesai"}</strong>
                   </span>
                 </div>
               </div>
@@ -648,8 +672,8 @@ function KioskContent() {
                       <div className="flex items-center justify-between text-[11px]">
                         <div className="flex items-center gap-1.5">
                           {isLatest && (
-                            <span className="bg-emerald-600 text-white font-mono text-[9px] font-bold px-1.5 py-0.2 rounded uppercase tracking-wider">
-                              Pos Terkini
+                            <span className="bg-blue-600 text-white font-mono text-[8.5px] font-bold px-1.5 py-0.2 rounded uppercase tracking-wider">
+                              Aktivitas Terakhir
                             </span>
                           )}
                           <strong className="text-zinc-900 font-bold">

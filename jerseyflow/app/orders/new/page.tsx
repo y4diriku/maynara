@@ -72,6 +72,7 @@ export default function NewOrderPage() {
   const [customerName, setCustomerName] = useState("")
   const [priority, setPriority] = useState("NORMAL")
   const [currentAdmin, setCurrentAdmin] = useState<string>("Admin Manayra")
+  const [currentAdminRole, setCurrentAdminRole] = useState<string>("ADMIN")
 
   // Parameter Spesifikasi, Tipe Order & Lokasi
   const [fabricType, setFabricType] = useState(FABRIC_OPTIONS[0])
@@ -126,6 +127,7 @@ export default function NewOrderPage() {
       if (session?.user) {
         const { data: prof } = await supabase.from("profiles").select("full_name").eq("id", session.user.id).single()
         if (prof?.full_name) setCurrentAdmin(prof.full_name)
+        if (prof?.role) setCurrentAdminRole(prof.role.toUpperCase())
       }
 
       const { data } = await supabase.from("makloon_partners").select("*").order("created_at", { ascending: false })
@@ -312,7 +314,9 @@ export default function NewOrderPage() {
       await supabase.from("production_logs").insert({
         order_id: orderData.id,
         stage: "DESIGN_QUEUE",
-        notes: "Pesanan baru dibuat dan masuk antrean desain."
+        notes: "Pesanan baru dibuat dan masuk antrean desain.",
+        operator_name: currentAdmin,
+        operator_role: currentAdminRole
       })
 
       router.push(`/orders/${orderData.id}`)
@@ -794,7 +798,7 @@ export default function NewOrderPage() {
         <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
           <div className="border-b border-zinc-200 pb-2">
             <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
-              <FileText className="h-3.5 w-3.5 text-zinc-600" /> Roster & Catatan Konsumen (Copy-Paste WA & 2 Screenshot)
+              <FileText className="h-3.5 w-3.5 text-zinc-600" /> Roster & Catatan Konsumen 
             </span>
           </div>
 

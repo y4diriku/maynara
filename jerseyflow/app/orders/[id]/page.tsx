@@ -1199,7 +1199,7 @@ export default function OrderDetailPage() {
         <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
           <div className="border-b border-zinc-200 pb-2">
             <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
-              <FileText className="h-3.5 w-3.5 text-zinc-600" /> Roster & Catatan Konsumen (Copy-Paste WA & 2 Screenshot)
+              <FileText className="h-3.5 w-3.5 text-zinc-600" /> Roster & Catatan Konsumen
             </span>
           </div>
 

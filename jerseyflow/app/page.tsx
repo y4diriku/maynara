@@ -80,6 +80,7 @@ export default function KanbanDashboard() {
   const [archiveModalOrder, setArchiveModalOrder] = useState<Order | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [userRole, setUserRole] = useState<string>("")
+  const [userName, setUserName] = useState<string>("")
   const [isOnline, setIsOnline] = useState<boolean>(true)
 
   // 1. Instant Cache Hydration
@@ -126,7 +127,8 @@ export default function KanbanDashboard() {
     async function fetchUserRole() {
       const { data: { session } } = await supabase.auth.getSession()
       if (session?.user) {
-        const { data: prof } = await supabase.from("profiles").select("role").eq("id", session.user.id).single()
+        const { data: prof } = await supabase.from("profiles").select("full_name, role").eq("id", session.user.id).single()
+        if (prof?.full_name) setUserName(prof.full_name)
         if (prof?.role) setUserRole(prof.role.toUpperCase())
       }
     }
@@ -196,7 +198,8 @@ export default function KanbanDashboard() {
         order_id: orderId,
         stage: targetStage,
         notes: "Dipindahkan ke " + STAGES[targetIndex].label,
-        operator_name: userRole || "Operator"
+        operator_name: userName || "Staf Workshop",
+        operator_role: userRole || "OPERATOR"
       })
     } catch (err: any) {
       console.error("Gagal update stage:", err)
