@@ -223,7 +223,7 @@ export default function SPKPrintPage() {
                       ? "border-black bg-black text-white"
                       : "border-black bg-zinc-100 text-zinc-900"
                   }`}>
-                    {order.priority === "URGENT" ? "🔥 SUPER URGENT" : order.priority === "HIGH" ? "⚡ PRIORITAS KILAT" : "REGULER"}
+                    {order.priority === "URGENT" ? "🔥 SUPER URGENT" : order.priority === "HIGH" ? "⚡ EXPRESS" : "REGULER"}
                   </span>
                   <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${
                     isPrintPress ? "border-black bg-black text-white" : "border-black bg-zinc-200 text-black"
