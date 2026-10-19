@@ -185,6 +185,8 @@ export default function OrderDetailPage() {
       setDownPayment(Number(oData.down_payment) || 0)
       setCurrentStatus(oData.current_status)
       setProductionNotes(oData.production_notes || "")
+      setCatatanDesain(oData.catatan_desain || "")
+      setLinkDriveAset(oData.link_drive_aset || "")
       setIsMakloon(Boolean(oData.is_makloon))
       setMakloonVendorName(oData.makloon_vendor_name || "")
       setMockupUrl1(oData.mockup_url || null)

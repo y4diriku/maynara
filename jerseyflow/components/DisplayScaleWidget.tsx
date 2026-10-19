@@ -6,9 +6,9 @@ import { Type, Check, X } from "lucide-react"
 type ScaleMode = "100" | "112" | "125"
 
 const SCALE_OPTIONS: { key: ScaleMode; label: string; zoom: string; desc: string }[] = [
-  { key: "100", label: "Ringkas (100%)", zoom: "1", desc: "Standar bawaan & padat kartu" },
-  { key: "112", label: "Nyaman (112%)", zoom: "1.12", desc: "Rekomendasi layar laptop" },
-  { key: "125", label: "Besar (125%)", zoom: "1.25", desc: "Monitor & baca jarak jauh" },
+  { key: "100", label: "Compact", zoom: "1", desc: "Default" },
+  { key: "112", label: "Medium", zoom: "1.12", desc: "Medium Zoom In" },
+  { key: "125", label: "Large", zoom: "1.25", desc: "Enlarge" },
 ]
 
 export default function DisplayScaleWidget() {

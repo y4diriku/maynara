@@ -301,7 +301,7 @@ export default function NewOrderPage() {
           total_price: totalPrice,
           down_payment: downPayment,
           is_paid_off: isPaid,
-          current_status: "DESIGN_QUEUE",
+          current_status: "ORDER_INBOX",
           production_notes: productionNotes,
           is_makloon: isMakloon,
           makloon_vendor_name: isMakloon ? makloonVendorName.trim() : null
@@ -314,7 +314,7 @@ export default function NewOrderPage() {
       await supabase.from("production_logs").insert({
         order_id: orderData.id,
         stage: "DESIGN_QUEUE",
-        notes: "Pesanan baru dibuat dan masuk antrean desain.",
+        notes: "Pesanan baru dibuat dan masuk ke antrean Order Masuk (Inbox).",
         operator_name: currentAdmin,
         operator_role: currentAdminRole
       })

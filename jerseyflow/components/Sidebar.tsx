@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { 
+  Inbox,
   KanbanSquare, 
   ClipboardList, 
   QrCode, 
@@ -26,8 +27,9 @@ export default function Sidebar() {
   const [brandTagline, setBrandTagline] = useState("Workshop OS")
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [inboxCount, setInboxCount] = useState(0)
 
-  useEffect(() => {
+    useEffect(() => {
     const savedState = localStorage.getItem("sidebar_collapsed")
     if (savedState !== null) {
       setIsCollapsed(savedState === "true")
@@ -61,6 +63,24 @@ export default function Sidebar() {
     }
 
     loadData()
+
+    async function fetchInboxCount() {
+      const { count } = await supabase
+        .from("orders")
+        .select("*", { count: "exact", head: true })
+        .eq("current_status", "ORDER_INBOX")
+      if (count !== null) setInboxCount(count)
+    }
+    fetchInboxCount()
+
+    const inboxChan = supabase
+      .channel("sidebar_inbox_count")
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => fetchInboxCount())
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(inboxChan)
+    }
   }, [])
 
   const toggleSidebar = () => {
@@ -83,6 +103,12 @@ export default function Sidebar() {
 
   const navigation = [
     ...(role === "OWNER" || role === "ADMIN" ? [
+      { 
+      name: "Order Masuk", 
+      href: "/orders/inbox", 
+      icon: Inbox,
+      badge: inboxCount > 0 ? inboxCount : null
+    },
       { name: "Antrean Produksi", href: "/", icon: KanbanSquare },
       { name: "Daftar Pesanan", href: "/orders", icon: ClipboardList },
     ] : []),
@@ -154,7 +180,21 @@ export default function Sidebar() {
               <item.icon className={cn("h-4 w-4 shrink-0", isActive ? "text-white" : "text-zinc-500 group-hover:text-zinc-900")} />
               
               {!isCollapsed && (
-                <span className="truncate">{item.name}</span>
+                <div className="flex items-center justify-between flex-1 min-w-0">
+                  <span className="truncate">{item.name}</span>
+                  {(item as any).badge && (
+                    <span className="ml-auto px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold bg-amber-500 text-white">
+                      {(item as any).badge}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Badge kecil saat sidebar ditutup (collapsed) */}
+              {isCollapsed && (item as any).badge && (
+                <span className="absolute top-1 right-1 h-4 w-4 rounded-full bg-amber-500 text-white text-[8px] font-mono font-bold flex items-center justify-center shadow-xs">
+                  {(item as any).badge}
+                </span>
               )}
 
               {isCollapsed && (
