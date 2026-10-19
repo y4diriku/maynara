@@ -15,6 +15,7 @@ interface ProfileItem {
 
 const ROLE_LABELS: { [key: string]: string } = {
   OWNER: "Owner",
+  ACCOUNTING: "Admin Keuangan / Accounting",
   ADMIN: "Admin Workshop",
   OPERATOR_DESIGN: "Operator Desain & Setting",
   DESIGNER: "Operator Desain & Setting",
@@ -235,6 +236,7 @@ export default function UserManagementPage() {
               >
                 <optgroup label="Manajemen & Kantor">
                   <option value="OWNER">Owner</option>
+                  <option value="ACCOUNTING">Admin Keuangan / Accounting</option>
                   <option value="ADMIN">Admin Workshop</option>
                 </optgroup>
                 <optgroup label="Pos 1: Desain & Setting">
@@ -291,7 +293,7 @@ export default function UserManagementPage() {
                     <td className="py-2.5 px-3 font-semibold text-zinc-900">{p.full_name}</td>
                     <td className="py-2.5 px-3">
                       <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
-                        p.role === "OWNER" ? "bg-amber-50 text-amber-800 border-amber-300" : "bg-zinc-100 text-zinc-800 border-zinc-300"
+                        p.role === "OWNER" ? "bg-amber-50 text-amber-800 border-amber-300" : p.role === "ACCOUNTING" ? "bg-emerald-50 text-emerald-800 border-emerald-300 font-bold" : "bg-zinc-100 text-zinc-800 border-zinc-300"
                       }`}>
                         {ROLE_LABELS[p.role] || p.role}
                       </span>

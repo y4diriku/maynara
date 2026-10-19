@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { 
+  Inbox,
   Menu, 
   X, 
   Plus, 
@@ -21,6 +22,7 @@ import { cn } from "@/lib/utils"
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [userRole, setUserRole] = useState("ADMIN")
+  const [inboxCount, setInboxCount] = useState(0)
   const pathname = usePathname()
   const router = useRouter()
 
@@ -37,6 +39,12 @@ export function Header() {
           setUserRole(data.role.toUpperCase())
         }
       }
+
+      const { count } = await supabase
+        .from("orders")
+        .select("*", { count: "exact", head: true })
+        .eq("current_status", "ORDER_INBOX")
+      if (count !== null) setInboxCount(count)
     }
     fetchRole()
   }, [])
@@ -58,6 +66,12 @@ export function Header() {
 
   const navigation = [
     ...(!isOperator ? [
+      { 
+      name: "Order Masuk", 
+      href: "/orders/inbox", 
+      icon: Inbox,
+      badge: inboxCount > 0 ? inboxCount : null
+    },
       { name: "Antrean Produksi", href: "/", icon: KanbanSquare },
       { name: "Daftar Pesanan", href: "/orders", icon: ClipboardList },
     ] : []),
@@ -144,12 +158,19 @@ export function Header() {
                     href={item.href}
                     onClick={() => setMobileMenuOpen(false)}
                     className={cn(
-                      "flex items-center gap-3 px-3 py-2 rounded text-xs font-medium",
+                      "flex items-center justify-between px-3 py-2 rounded text-xs font-medium",
                       isActive ? "bg-zinc-900 text-white font-semibold" : "text-zinc-700 hover:bg-zinc-100"
                     )}
                   >
-                    <item.icon className="h-4 w-4" />
-                    {item.name}
+                    <div className="flex items-center gap-3">
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.name}</span>
+                    </div>
+                    {(item as any).badge && (
+                      <span className="px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold bg-amber-500 text-white">
+                        {(item as any).badge}
+                      </span>
+                    )}
                   </Link>
                 )
               })}

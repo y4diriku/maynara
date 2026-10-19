@@ -22,29 +22,20 @@ export async function POST(req: Request) {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
+    // Membuat user via Admin Auth. 
+    // Trigger database di Supabase akan otomatis membuat data di tabel 'profiles'.
     const { data: userData, error: userError } = await supabaseAdmin.auth.admin.createUser({
       email: email.trim(),
       password: password,
       email_confirm: true,
-      user_metadata: { full_name: fullName, role: role.toUpperCase() }
+      user_metadata: { 
+        full_name: fullName.trim(), 
+        role: role.toUpperCase() 
+      }
     })
 
     if (userError) {
       return NextResponse.json({ error: userError.message }, { status: 400 })
-    }
-
-    if (userData?.user) {
-      const { error: profileError } = await supabaseAdmin
-        .from("profiles")
-        .upsert({
-          id: userData.user.id,
-          full_name: fullName,
-          role: role.toUpperCase()
-        })
-
-      if (profileError) {
-        return NextResponse.json({ error: profileError.message }, { status: 400 })
-      }
     }
 
     return NextResponse.json({ success: true, user: userData.user })

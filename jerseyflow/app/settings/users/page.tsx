@@ -240,7 +240,7 @@ export default function UserManagementPage() {
                   <option value="ADMIN">Admin Workshop</option>
                 </optgroup>
                 <optgroup label="Pos 1: Desain & Setting">
-                  <option value="OPERATOR_DESIGN">Operator Desain & Setting</option>
+                  <option value="OPERATOR_DESIGN">Operator Desain & Setting (Desainer)</option>
                 </optgroup>
                 <optgroup label="Pos 2: Cetak & Sublimasi">
                   <option value="OPERATOR_PRINT">Operator Print</option>
