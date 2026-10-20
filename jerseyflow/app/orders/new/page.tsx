@@ -61,16 +61,20 @@ export default function NewOrderPage() {
 
   const [dragTarget, setDragTarget] = useState<string | null>(null)
   const [deadlineDate, setDeadlineDate] = useState("")
-  const [packageType, setPackageType] = useState<"ATASAN" | "STELAN">("ATASAN")
+    // Model Aktif & Kustom (Dideklarasikan di atas sebelum isStelan)
+  const [activeModels, setActiveModels] = useState<string[]>(["Lengan Pendek", "Lengan Panjang"])
+  const [customModelInput, setCustomModelInput] = useState("")
+
+// Otomatisasi Tipe Paket (Solusi 1): Terdeteksi otomatis dari item bawahan yang aktif
+  const isStelan = activeModels.some((m) =>
+    m === "Celana Pendek" || m === "Celana Training" || m.toLowerCase().includes("celana")
+  )
+  const packageType: "ATASAN" | "STELAN" = isStelan ? "STELAN" : "ATASAN" 
   const [inkType, setInkType] = useState<"ORI" | "CINA">("ORI")
   const [inkProfile, setInkProfile] = useState<string>("952")
   const [orderType, setOrderType] = useState<"FULL_ORDER" | "PRINT_PRESS">("FULL_ORDER")
   const [designLocation, setDesignLocation] = useState<"DISINI" | "LUAR">("DISINI")
   const [cuttingLocation, setCuttingLocation] = useState<"DISINI" | "LUAR">("DISINI")
-
-  // Model Aktif & Kustom
-  const [activeModels, setActiveModels] = useState<string[]>(["Lengan Pendek", "Lengan Panjang"])
-  const [customModelInput, setCustomModelInput] = useState("")
 
   // State Biaya Dinamis Berbasis Kategori
   const [priceAdult, setPriceAdult] = useState<number>(0)
@@ -485,16 +489,17 @@ export default function NewOrderPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* PARAMETER UTAMA 3 KOLOM */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Kolom 1: Identitas & Prioritas */}
-          <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
-            <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5">
-              <User className="h-3.5 w-3.5 text-zinc-500" /> Informasi Pesanan
-            </span>
-            <div className="space-y-2 text-xs">
+        {/* PARAMETER UTAMA 3 KOLOM SEIMBANG */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* KOLOM 1: ADMINISTRASI, JADWAL & ALUR KERJA */}
+          <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3 flex flex-col justify-between">
+            <div className="space-y-2.5 text-xs">
+              <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5 border-b border-zinc-100 pb-1.5">
+                <User className="h-3.5 w-3.5 text-zinc-500" /> Informasi Pesanan & Jadwal
+              </span>
+
               <div>
-                <label className="block text-zinc-600 font-semibold mb-1">Nama Order</label>
+                <label className="block text-zinc-600 font-semibold mb-0.5 text-[10.5px]">Nama Order</label>
                 <input
                   type="text"
                   required
@@ -504,8 +509,9 @@ export default function NewOrderPage() {
                   className="w-full px-2.5 py-1.5 border-2 border-zinc-800 rounded font-bold text-zinc-900 focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-zinc-50/50"
                 />
               </div>
+
               <div>
-                <label className="block text-zinc-600 font-medium mb-1">Nama Pemesan / Instansi</label>
+                <label className="block text-zinc-600 font-medium mb-0.5 text-[10.5px]">Nama Pemesan / Instansi</label>
                 <input
                   type="text"
                   required
@@ -516,55 +522,96 @@ export default function NewOrderPage() {
                 />
               </div>
 
-              {/* PRIORITAS PENGERJAAN DENGAN IKON & LABEL LENGKAP */}
-              <div>
-                <label className="block text-zinc-600 font-medium mb-1">Prioritas Pengerjaan</label>
-                <select
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white font-semibold text-xs"
-                >
-                  <option value="NORMAL">🟢 Reguler / Standar (Normal)</option>
-                  <option value="HIGH">⚡ Express / Kilat (Prioritas Tinggi)</option>
-                  <option value="URGENT">🔥 Super Express / Urgent (Darurat)</option>
-                </select>
+              {/* Prioritas & Target Selesai (Berdampingan Rapi) */}
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-100">
+                <div>
+                  <label className="block text-zinc-600 font-semibold mb-0.5 text-[10px]">Prioritas</label>
+                  <select
+                    value={priority}
+                    onChange={(e) => setPriority(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-zinc-300 rounded font-semibold text-xs bg-white focus:ring-1 focus:ring-zinc-900 focus:outline-none"
+                  >
+                    <option value="NORMAL">🟢 Reguler</option>
+                    <option value="HIGH">⚡ Express</option>
+                    <option value="URGENT">🔥 Urgent</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-zinc-600 font-semibold mb-0.5 text-[10px]">Target Deadline</label>
+                  <input
+                    type="date"
+                    required
+                    value={deadlineDate}
+                    onChange={(e) => setDeadlineDate(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900 focus:outline-none"
+                  />
+                </div>
               </div>
 
-              {/* TIPE ORDER: FULL ORDER vs PRINT PRESS */}
-              <div className="pt-1 border-t border-zinc-100">
-                <label className="block text-zinc-700 font-bold mb-1 text-[11px]">Tipe Pengerjaan Order</label>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <label className="flex items-center gap-1.5 p-1.5 border rounded cursor-pointer text-[11px] font-medium bg-zinc-50">
-                    <input
-                      type="radio"
-                      name="order_type"
-                      checked={orderType === "FULL_ORDER"}
-                      onChange={() => setOrderType("FULL_ORDER")}
-                      className="text-zinc-900 focus:ring-zinc-900"
-                    />
-                    <span>Full Order</span>
-                  </label>
-                  <label className="flex items-center gap-1.5 p-1.5 border rounded cursor-pointer text-[11px] font-medium bg-zinc-50">
-                    <input
-                      type="radio"
-                      name="order_type"
-                      checked={orderType === "PRINT_PRESS"}
-                      onChange={() => setOrderType("PRINT_PRESS")}
-                      className="text-zinc-900 focus:ring-zinc-900"
-                    />
-                    <span className="font-bold text-purple-900">Print + Press</span>
-                  </label>
+              {/* Tipe Order & Rute Layanan */}
+              <div className="pt-2 border-t border-zinc-100 space-y-2">
+                <div>
+                  <label className="block text-zinc-700 font-bold mb-1 text-[10.5px]">Tipe Pengerjaan Order</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <label className="flex items-center gap-1.5 p-1.5 border rounded cursor-pointer text-[10.5px] font-medium bg-zinc-50">
+                      <input
+                        type="radio"
+                        name="order_type"
+                        checked={orderType === "FULL_ORDER"}
+                        onChange={() => setOrderType("FULL_ORDER")}
+                        className="text-zinc-900"
+                      />
+                      <span>Full Order</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 p-1.5 border rounded cursor-pointer text-[10.5px] font-medium bg-zinc-50">
+                      <input
+                        type="radio"
+                        name="order_type"
+                        checked={orderType === "PRINT_PRESS"}
+                        onChange={() => setOrderType("PRINT_PRESS")}
+                        className="text-zinc-900"
+                      />
+                      <span className="font-bold text-purple-900">Print + Press</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[10.5px]">
+                  <div>
+                    <span className="text-zinc-600 font-medium block">Desain/Setting:</span>
+                    <select
+                      value={designLocation}
+                      onChange={(e) => setDesignLocation(e.target.value as any)}
+                      className="w-full px-1.5 py-1 border border-zinc-300 rounded bg-white text-[10.5px] mt-0.5"
+                    >
+                      <option value="DISINI">Disini (Setting)</option>
+                      <option value="LUAR">File Luar / Jadi</option>
+                    </select>
+                  </div>
+                  <div>
+                    <span className="text-zinc-600 font-medium block">Potong Kain:</span>
+                    <select
+                      value={cuttingLocation}
+                      onChange={(e) => setCuttingLocation(e.target.value as any)}
+                      className="w-full px-1.5 py-1 border border-zinc-300 rounded bg-white text-[10.5px] mt-0.5"
+                    >
+                      <option value="DISINI">Disini (Potong)</option>
+                      <option value="LUAR">Kain Bawa Sendiri</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Kolom 2: Bahan, Model, Paket, Tinta & Lokasi Layanan */}
-          <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-2.5">
-            <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5">
-              <Shirt className="h-3.5 w-3.5 text-zinc-500" /> Bahan & Parameter Produksi
-            </span>
-            <div className="space-y-2 text-xs">
+          {/* KOLOM 2: BAHAN, TINTA & PILIHAN MODEL ITEM */}
+          <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3 flex flex-col justify-between">
+            <div className="space-y-2.5 text-xs">
+              <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5 border-b border-zinc-100 pb-1.5">
+                <Shirt className="h-3.5 w-3.5 text-zinc-500" /> Bahan & Pilihan Model Item
+              </span>
+
+              {/* Bahan Kain & Model Kerah */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">Bahan Kain</label>
@@ -591,6 +638,7 @@ export default function NewOrderPage() {
                     />
                   )}
                 </div>
+
                 <div>
                   <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">Model Kerah</label>
                   <select
@@ -618,37 +666,12 @@ export default function NewOrderPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-100">
+              {/* Tinta Sublim & Profil Mesin */}
+              <div className="pt-2 border-t border-zinc-100 flex items-center justify-between">
                 <div>
-                  <label className="block text-zinc-700 font-bold mb-1 text-[11px]">Pilihan Paket</label>
-                  <div className="space-y-1">
-                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
-                      <input
-                        type="radio"
-                        name="package_type"
-                        checked={packageType === "ATASAN"}
-                        onChange={() => setPackageType("ATASAN")}
-                        className="text-zinc-900"
-                      />
-                      <span>Atasan Saja</span>
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
-                      <input
-                        type="radio"
-                        name="package_type"
-                        checked={packageType === "STELAN"}
-                        onChange={() => setPackageType("STELAN")}
-                        className="text-zinc-900"
-                      />
-                      <span className="font-semibold text-zinc-900">+ Celana</span>
-                    </label>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-zinc-700 font-bold mb-1 text-[11px]">Tinta Sublim</label>
-                  <div className="space-y-1">
-                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                  <span className="text-[10px] text-zinc-500 font-medium block">Tinta Sublim:</span>
+                  <div className="flex items-center gap-3 mt-0.5">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[10.5px]">
                       <input
                         type="radio"
                         name="ink_type"
@@ -659,9 +682,9 @@ export default function NewOrderPage() {
                         }}
                         className="text-zinc-900"
                       />
-                      <span className="font-semibold text-blue-800">Tinta Ori</span>
+                      <span className="font-semibold text-blue-800">Ori</span>
                     </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[10.5px]">
                       <input
                         type="radio"
                         name="ink_type"
@@ -672,86 +695,166 @@ export default function NewOrderPage() {
                         }}
                         className="text-zinc-900"
                       />
-                      <span>Tinta Cina</span>
+                      <span>Cina</span>
                     </label>
                   </div>
+                </div>
 
-                  {/* Profil Cetak Mesin */}
-                  <div className="mt-1.5 pt-1 border-t border-zinc-100">
-                    <span className="block text-[9.5px] text-zinc-500 font-bold mb-0.5 uppercase tracking-wider">
-                      Profil ({inkType === "ORI" ? "Ori" : "Cina"}):
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {INK_PROFILES[inkType].map((prof) => (
-                        <label key={prof} className="flex items-center gap-1 cursor-pointer text-[10.5px]">
-                          <input
-                            type="radio"
-                            name="ink_profile"
-                            value={prof}
-                            checked={inkProfile === prof}
-                            onChange={() => setInkProfile(prof)}
-                            className="text-zinc-900"
-                          />
-                          <span className={`px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold ${
-                            inkProfile === prof 
-                              ? "bg-blue-100 text-blue-900 border border-blue-300 shadow-2xs" 
-                              : "text-zinc-600 hover:text-zinc-900"
-                          }`}>
-                            {prof}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-zinc-500 font-medium block">Profil Cetak:</span>
+                  <div className="flex items-center gap-1 mt-0.5 justify-end">
+                    {INK_PROFILES[inkType].map((prof) => (
+                      <label key={prof} className="flex items-center gap-0.5 cursor-pointer text-[10px]">
+                        <input
+                          type="radio"
+                          name="ink_profile"
+                          value={prof}
+                          checked={inkProfile === prof}
+                          onChange={() => setInkProfile(prof)}
+                          className="text-zinc-900 h-3 w-3"
+                        />
+                        <span className={`px-1 py-0.2 rounded font-mono font-bold ${
+                          inkProfile === prof ? "bg-blue-100 text-blue-900 border border-blue-300" : "text-zinc-600"
+                        }`}>{prof}</span>
+                      </label>
+                    ))}
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-100 text-[10.5px]">
-                <div>
-                  <span className="text-zinc-600 font-medium block">Desain/Setting:</span>
-                  <select
-                    value={designLocation}
-                    onChange={(e) => setDesignLocation(e.target.value as any)}
-                    className="w-full px-1.5 py-1 border border-zinc-300 rounded bg-white text-[10.5px] mt-0.5"
-                  >
-                    <option value="DISINI">Disini (Setting)</option>
-                    <option value="LUAR">File Luar / Jadi</option>
-                  </select>
+              {/* PILIHAN MODEL ITEM (GROUPED CHIPS + BADGE PAKET OTOMATIS) */}
+              <div className="pt-2 border-t border-zinc-100 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10.5px] font-bold text-zinc-700 uppercase tracking-wider block">
+                    Pilihan Item Model:
+                  </span>
+                  {/* Badge Paket Otomatis (Solusi 1) */}
+                  <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold border ${
+                    packageType === "STELAN"
+                      ? "bg-purple-100 text-purple-900 border-purple-300"
+                      : "bg-zinc-100 text-zinc-700 border-zinc-200"
+                  }`}>
+                    {packageType === "STELAN" ? "✓ STELAN (+CELANA)" : "ATASAN SAJA"}
+                  </span>
                 </div>
-                <div>
-                  <span className="text-zinc-600 font-medium block">Potong Kain:</span>
-                  <select
-                    value={cuttingLocation}
-                    onChange={(e) => setCuttingLocation(e.target.value as any)}
-                    className="w-full px-1.5 py-1 border border-zinc-300 rounded bg-white text-[10.5px] mt-0.5"
-                  >
-                    <option value="DISINI">Disini (Potong)</option>
-                    <option value="LUAR">Kain Bawa Sendiri</option>
-                  </select>
-                </div>
-              </div>
 
-              <div>
-                <label className="block text-zinc-600 font-medium mb-1">Target Selesai (Deadline)</label>
-                <input
-                  type="date"
-                  required
-                  value={deadlineDate}
-                  onChange={(e) => setDeadlineDate(e.target.value)}
-                  className="w-full px-2.5 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none font-mono"
-                />
+                {/* Jersey Chips */}
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className="text-[9.5px] font-bold text-zinc-400 w-12 shrink-0">Jersey:</span>
+                  {PRESET_MODELS.filter((p) => p.category === "jersey").map((m) => {
+                    const isActive = activeModels.includes(m.key)
+                    return (
+                      <button
+                        key={m.key}
+                        type="button"
+                        onClick={() => toggleModel(m.key)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors cursor-pointer border ${
+                          isActive
+                            ? "bg-zinc-900 text-white border-zinc-900 shadow-2xs"
+                            : "bg-white text-zinc-600 border-zinc-300 hover:bg-zinc-100"
+                        }`}
+                      >
+                        {isActive ? "✓ " : "+ "}{m.label}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Jaket Chips */}
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className="text-[9.5px] font-bold text-blue-500 w-12 shrink-0">Jaket:</span>
+                  {PRESET_MODELS.filter((p) => p.category === "jaket").map((m) => {
+                    const isActive = activeModels.includes(m.key)
+                    return (
+                      <button
+                        key={m.key}
+                        type="button"
+                        onClick={() => toggleModel(m.key)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors cursor-pointer border ${
+                          isActive
+                            ? "bg-blue-700 text-white border-blue-700 shadow-2xs"
+                            : "bg-white text-blue-800 border-blue-200 hover:bg-blue-50"
+                        }`}
+                      >
+                        {isActive ? "✓ " : "+ "}{m.label}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Bawahan Chips */}
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className="text-[9.5px] font-bold text-purple-500 w-12 shrink-0">Bawahan:</span>
+                  {PRESET_MODELS.filter((p) => p.category === "celana").map((m) => {
+                    const isActive = activeModels.includes(m.key)
+                    return (
+                      <button
+                        key={m.key}
+                        type="button"
+                        onClick={() => toggleModel(m.key)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors cursor-pointer border ${
+                          isActive
+                            ? "bg-purple-700 text-white border-purple-700 shadow-2xs"
+                            : "bg-white text-purple-800 border-purple-200 hover:bg-purple-50"
+                        }`}
+                      >
+                        {isActive ? "✓ " : "+ "}{m.label}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Model Kustom */}
+                <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-zinc-100">
+                  <span className="text-[9.5px] font-bold text-zinc-400 w-12 shrink-0">Kustom:</span>
+                  {activeModels
+                    .filter((m) => !PRESET_MODELS.some((p) => p.key === m))
+                    .map((m) => (
+                      <span
+                        key={m}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-700 text-white text-[9.5px] font-bold shadow-2xs"
+                      >
+                        <span>✓ {m}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveModel(m)}
+                          className="hover:text-red-200 font-bold ml-0.5"
+                          title="Hapus Model"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  <div className="inline-flex items-center gap-1">
+                    <input
+                      type="text"
+                      placeholder="Model lain..."
+                      value={customModelInput}
+                      onChange={(e) => setCustomModelInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddCustomModel(); } }}
+                      className="px-1.5 py-0.5 text-[10px] border border-zinc-300 rounded bg-white w-28"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCustomModel}
+                      className="px-2 py-0.5 bg-zinc-800 text-white rounded text-[10px] font-bold hover:bg-zinc-700 cursor-pointer"
+                    >
+                      + Tambah
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Kolom 3: Kalkulator Harga Pintar Berbasis Kategori Aktif */}
-          <div className="border border-zinc-200 bg-white p-3 rounded shadow-2xs space-y-2 flex flex-col justify-between">
+          {/* KOLOM 3: BIAYA & PEMBAYARAN (SMART PRICING) */}
+          <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-2 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between border-b border-zinc-100 pb-1.5 mb-1.5">
                 <span className="text-xs font-bold text-zinc-800 uppercase tracking-tight flex items-center gap-1.5">
                   <DollarSign className="h-3.5 w-3.5 text-zinc-500" /> Biaya & Pembayaran
                 </span>
-                <label className="flex items-center gap-1 cursor-pointer text-[10px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200" title="Ketik total harga borongan bulat">
+                <label className="flex items-center gap-1 cursor-pointer text-[10px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200" title="Kunci total harga borongan bulat">
                   <input
                     type="checkbox"
                     checked={isManualPrice}
@@ -768,28 +871,28 @@ export default function NewOrderPage() {
               </div>
 
               <div className="space-y-1.5 text-xs">
-                {/* 1. Kategori Jersey (Jika Aktif) */}
+                {/* 1. Kategori Jersey */}
                 {hasJersey && (
                   <div className="bg-zinc-50/70 p-1.5 rounded border border-zinc-200/70 space-y-1">
                     <span className="text-[9.5px] font-bold text-zinc-500 uppercase block">Tarif Jersey Atasan</span>
                     <div className="grid grid-cols-2 gap-1.5">
                       <div>
                         <label className="block text-zinc-600 font-medium mb-0.5 text-[9.5px]">Dewasa (Rp)</label>
-                        <input type="text" placeholder="0" value={formatRibuan(priceAdult)} onChange={(e) => setPriceAdult(parseRibuan(e.target.value))} className="w-full px-1.5 py-0.5 border border-zinc-300 rounded font-mono text-xs" />
+                        <input type="text" placeholder="0" value={formatRibuan(priceAdult)} onChange={(e) => setPriceAdult(parseRibuan(e.target.value))} className="w-full px-1.5 py-0.5 border border-zinc-300 rounded font-mono text-xs bg-white" />
                       </div>
                       <div>
                         <label className="block text-zinc-600 font-medium mb-0.5 text-[9.5px]">Anak (Rp)</label>
-                        <input type="text" placeholder="0" value={formatRibuan(priceKid)} onChange={(e) => setPriceKid(parseRibuan(e.target.value))} className="w-full px-1.5 py-0.5 border border-zinc-300 rounded font-mono text-xs" />
+                        <input type="text" placeholder="0" value={formatRibuan(priceKid)} onChange={(e) => setPriceKid(parseRibuan(e.target.value))} className="w-full px-1.5 py-0.5 border border-zinc-300 rounded font-mono text-xs bg-white" />
                       </div>
                     </div>
                     <div>
                       <label className="block text-zinc-600 font-medium mb-0.5 text-[9.5px]">+ Lengan Panjang / Raglan Panjang (Rp)</label>
-                      <input type="text" placeholder="0" value={formatRibuan(feeLongSleeve)} onChange={(e) => setFeeLongSleeve(parseRibuan(e.target.value))} className="w-full px-1.5 py-0.5 border border-zinc-300 rounded font-mono text-xs" />
+                      <input type="text" placeholder="0" value={formatRibuan(feeLongSleeve)} onChange={(e) => setFeeLongSleeve(parseRibuan(e.target.value))} className="w-full px-1.5 py-0.5 border border-zinc-300 rounded font-mono text-xs bg-white" />
                     </div>
                   </div>
                 )}
 
-                {/* 2. Kategori Jaket (Jika Aktif) */}
+                {/* 2. Kategori Jaket */}
                 {hasJaket && (
                   <div className="bg-blue-50/50 p-1.5 rounded border border-blue-200/70 space-y-1">
                     <span className="text-[9.5px] font-bold text-blue-800 uppercase block">Tarif Jaket Printing</span>
@@ -806,7 +909,7 @@ export default function NewOrderPage() {
                   </div>
                 )}
 
-                {/* 3. Kategori Celana & Training (Jika Aktif) */}
+                {/* 3. Kategori Celana & Training */}
                 {(hasCelanaPendek || hasTraining) && (
                   <div className="bg-purple-50/40 p-1.5 rounded border border-purple-200/70 space-y-1">
                     <span className="text-[9.5px] font-bold text-purple-800 uppercase block">Tarif Celana / Bawahan</span>
@@ -827,15 +930,15 @@ export default function NewOrderPage() {
                   </div>
                 )}
 
-                {/* 4. Biaya Tambahan Global (Jumbo & Diskon) */}
+                {/* 4. Biaya Tambahan Global */}
                 <div className="grid grid-cols-2 gap-1.5 pt-0.5">
                   <div>
                     <label className="block text-zinc-600 font-medium mb-0.5 text-[9.5px]">+ Jumbo 2XL+ (Rp)</label>
-                    <input type="text" placeholder="0" value={formatRibuan(feeJumbo)} onChange={(e) => setFeeJumbo(parseRibuan(e.target.value))} className="w-full px-1.5 py-0.5 border border-zinc-300 rounded font-mono text-xs" />
+                    <input type="text" placeholder="0" value={formatRibuan(feeJumbo)} onChange={(e) => setFeeJumbo(parseRibuan(e.target.value))} className="w-full px-1.5 py-0.5 border border-zinc-300 rounded font-mono text-xs bg-white" />
                   </div>
                   <div>
                     <label className="block text-red-600 font-medium mb-0.5 text-[9.5px]">Diskon (Rp)</label>
-                    <input type="text" placeholder="0" value={formatRibuan(discountAmount)} onChange={(e) => setDiscountAmount(parseRibuan(e.target.value))} className="w-full px-1.5 py-0.5 border border-zinc-300 rounded font-mono text-red-600 font-bold text-xs" />
+                    <input type="text" placeholder="0" value={formatRibuan(discountAmount)} onChange={(e) => setDiscountAmount(parseRibuan(e.target.value))} className="w-full px-1.5 py-0.5 border border-zinc-300 rounded font-mono text-red-600 font-bold text-xs bg-white" />
                   </div>
                 </div>
 
@@ -867,7 +970,7 @@ export default function NewOrderPage() {
 
                 <div className="pt-0.5">
                   <label className="block text-zinc-600 font-medium mb-0.5 text-[9.5px]">Uang Muka / DP (Rp)</label>
-                  <input type="text" placeholder="0" value={formatRibuan(downPayment)} onChange={(e) => setDownPayment(parseRibuan(e.target.value))} className="w-full px-2 py-1 border border-zinc-300 rounded font-mono font-bold text-emerald-700 focus:ring-1 focus:ring-emerald-600 focus:outline-none text-xs" />
+                  <input type="text" placeholder="0" value={formatRibuan(downPayment)} onChange={(e) => setDownPayment(parseRibuan(e.target.value))} className="w-full px-2 py-1 border border-zinc-300 rounded font-mono font-bold text-emerald-700 focus:ring-1 focus:ring-emerald-600 focus:outline-none text-xs bg-white" />
                 </div>
               </div>
             </div>
@@ -881,16 +984,17 @@ export default function NewOrderPage() {
           </div>
         </div>
 
-        {/* MATRIKS UKURAN MULTI-MODEL: PANEL SELEKTOR + TABEL DINAMIS */}
-        <div className="border border-zinc-200 bg-white rounded p-3.5 shadow-2xs space-y-3.5">
-          {/* Header Panel */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-200 pb-2">
+        {/* ========================================================================= */}
+        {/* AREA BAWAH: MATRIKS UKURAN (SIZE ANAK & SIZE DEWASA)                      */}
+        {/* ========================================================================= */}
+        <div className="border border-zinc-200 bg-white rounded p-3.5 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between border-b border-zinc-200 pb-2">
             <div>
               <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
-                <Layers className="h-3.5 w-3.5 text-zinc-600" /> Matriks Ukuran & Selektor Model Item
+                <Layers className="h-3.5 w-3.5 text-zinc-600" /> Matriks Ukuran Produksi
               </span>
               <p className="text-[11px] text-zinc-500">
-                Pilih model yang diproduksi pada order ini. Kolom tabel akan menyesuaikan secara otomatis.
+                Isi jumlah pcs sesuai ukuran. Kolom otomatis menyesuaikan dengan item model yang dipilih di Kolom 2 atas.
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs">
@@ -900,127 +1004,12 @@ export default function NewOrderPage() {
             </div>
           </div>
 
-          {/* 1. Panel Chip Selektor Model */}
-          <div className="bg-zinc-50/80 border border-zinc-200 rounded-lg p-2.5 space-y-2 text-xs">
-            <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider block">
-              Pilih Item Aktif pada Order Ini:
-            </span>
-
-            {/* Jersey */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] font-bold text-zinc-400 uppercase w-14 shrink-0">Jersey:</span>
-              {PRESET_MODELS.filter((p) => p.category === "jersey").map((m) => {
-                const isActive = activeModels.includes(m.key)
-                return (
-                  <button
-                    key={m.key}
-                    type="button"
-                    onClick={() => toggleModel(m.key)}
-                    className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors cursor-pointer border ${
-                      isActive
-                        ? "bg-zinc-900 text-white border-zinc-900 shadow-2xs"
-                        : "bg-white text-zinc-600 border-zinc-300 hover:bg-zinc-100"
-                    }`}
-                  >
-                    {isActive ? "✓ " : "+ "}{m.label}
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Jaket */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] font-bold text-blue-500 uppercase w-14 shrink-0">Jaket:</span>
-              {PRESET_MODELS.filter((p) => p.category === "jaket").map((m) => {
-                const isActive = activeModels.includes(m.key)
-                return (
-                  <button
-                    key={m.key}
-                    type="button"
-                    onClick={() => toggleModel(m.key)}
-                    className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors cursor-pointer border ${
-                      isActive
-                        ? "bg-blue-700 text-white border-blue-700 shadow-2xs"
-                        : "bg-white text-blue-800 border-blue-200 hover:bg-blue-50"
-                    }`}
-                  >
-                    {isActive ? "✓ " : "+ "}{m.label}
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Celana & Training */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] font-bold text-purple-500 uppercase w-14 shrink-0">Bawahan:</span>
-              {PRESET_MODELS.filter((p) => p.category === "celana").map((m) => {
-                const isActive = activeModels.includes(m.key)
-                return (
-                  <button
-                    key={m.key}
-                    type="button"
-                    onClick={() => toggleModel(m.key)}
-                    className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors cursor-pointer border ${
-                      isActive
-                        ? "bg-purple-700 text-white border-purple-700 shadow-2xs"
-                        : "bg-white text-purple-800 border-purple-200 hover:bg-purple-50"
-                    }`}
-                  >
-                    {isActive ? "✓ " : "+ "}{m.label}
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Tambah Model Kustom Lain */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-zinc-200/60">
-              <span className="text-[10px] font-bold text-zinc-400 uppercase w-14 shrink-0">Kustom:</span>
-              {activeModels
-                .filter((m) => !PRESET_MODELS.some((p) => p.key === m))
-                .map((m) => (
-                  <span
-                    key={m}
-                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-emerald-700 text-white text-xs font-bold border border-emerald-800 shadow-2xs"
-                  >
-                    <span>✓ {m}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveModel(m)}
-                      className="hover:text-red-200 font-bold ml-1"
-                      title="Hapus Model Ini"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-
-              <div className="inline-flex items-center gap-1">
-                <input
-                  type="text"
-                  placeholder="Ketik model lain (cth: Singlet)..."
-                  value={customModelInput}
-                  onChange={(e) => setCustomModelInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddCustomModel(); } }}
-                  className="px-2 py-0.5 text-xs border border-zinc-300 rounded bg-white w-44"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddCustomModel}
-                  className="px-2 py-0.5 bg-zinc-800 text-white rounded text-xs font-bold hover:bg-zinc-700 cursor-pointer"
-                >
-                  + Tambah
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* 2. Dua Tabel Matriks Ukuran (Anak & Dewasa) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Kategori Anak */}
+            {/* 1. Size Anak */}
             <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/40 space-y-2 overflow-x-auto">
               <div className="flex items-center justify-between border-b border-zinc-200 pb-1">
                 <span className="text-xs font-bold text-zinc-800 uppercase flex items-center gap-1">
-                  🧒 Kategori Anak
+                  🧒 Size Anak
                 </span>
                 <span className="font-mono text-[11px] font-bold text-zinc-700">
                   Total Anak: {matrixTotals.kidTotalPcs} pcs
@@ -1069,11 +1058,11 @@ export default function NewOrderPage() {
               </table>
             </div>
 
-            {/* Kategori Dewasa */}
+            {/* 2. Size Dewasa */}
             <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/40 space-y-2 overflow-x-auto">
               <div className="flex items-center justify-between border-b border-zinc-200 pb-1">
                 <span className="text-xs font-bold text-zinc-800 uppercase flex items-center gap-1">
-                  👕 Kategori Dewasa
+                  👕 Size Dewasa
                 </span>
                 <span className="font-mono text-[11px] font-bold text-zinc-700">
                   Total Dewasa: {matrixTotals.adultTotalPcs} pcs
@@ -1123,7 +1112,7 @@ export default function NewOrderPage() {
             </div>
           </div>
 
-          {/* 3. Baris Grand Total Produksi */}
+          {/* Baris Grand Total Rekapitulasi */}
           <div className="bg-zinc-900 text-white p-2.5 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
