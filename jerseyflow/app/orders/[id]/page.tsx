@@ -1448,91 +1448,194 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* MATRIKS UKURAN: ANAK (KIRI) & DEWASA (KANAN) */}
-        <div className="border border-zinc-200 bg-white rounded p-3.5 shadow-2xs space-y-3">
-          <div className="flex items-center justify-between border-b border-zinc-200 pb-2">
+        {/* MATRIKS UKURAN MULTI-MODEL: PANEL SELEKTOR + TABEL DINAMIS */}
+        <div className="border border-zinc-200 bg-white rounded p-3.5 shadow-2xs space-y-3.5">
+          {/* Header Panel */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-200 pb-2">
             <div>
               <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
-                <Layers className="h-3.5 w-3.5 text-zinc-600" /> Matriks Ukuran & Rekapitulasi Produksi
+                <Layers className="h-3.5 w-3.5 text-zinc-600" /> Matriks Ukuran & Selektor Model Item
               </span>
               <p className="text-[11px] text-zinc-500">
-                Pembaruan angka otomatis memperbarui total order. Kolom celana aktif jika memilih paket Stelan.
+                Pilih model yang diproduksi pada order ini. Kolom tabel akan menyesuaikan secara otomatis.
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs">
-              <span className="px-2 py-0.5 rounded font-mono font-bold bg-zinc-100 text-zinc-800 border">
-                Paket: {packageType === "STELAN" ? "Stelan Celana" : "Atasan Saja"}
-              </span>
               <span className="px-2 py-0.5 rounded font-mono font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                Tinta: {inkType === "ORI" ? "Ori" : "Cina"}
+                Tinta: {inkType === "ORI" ? "Ori" : "Cina"} ({inkProfile})
               </span>
             </div>
           </div>
 
+          {/* 1. Panel Chip Selektor Model */}
+          <div className="bg-zinc-50/80 border border-zinc-200 rounded-lg p-2.5 space-y-2 text-xs">
+            <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider block">
+              Pilih Item Aktif pada Order Ini:
+            </span>
+
+            {/* Jersey */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase w-14 shrink-0">Jersey:</span>
+              {PRESET_MODELS.filter((p) => p.category === "jersey").map((m) => {
+                const isActive = activeModels.includes(m.key)
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    disabled={isLocked || isDesignerRole}
+                    onClick={() => toggleModel(m.key)}
+                    className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors cursor-pointer border ${
+                      isActive
+                        ? "bg-zinc-900 text-white border-zinc-900 shadow-2xs"
+                        : "bg-white text-zinc-600 border-zinc-300 hover:bg-zinc-100"
+                    } disabled:opacity-75 disabled:cursor-not-allowed`}
+                  >
+                    {isActive ? "✓ " : "+ "}{m.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Jaket */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-bold text-blue-500 uppercase w-14 shrink-0">Jaket:</span>
+              {PRESET_MODELS.filter((p) => p.category === "jaket").map((m) => {
+                const isActive = activeModels.includes(m.key)
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    disabled={isLocked || isDesignerRole}
+                    onClick={() => toggleModel(m.key)}
+                    className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors cursor-pointer border ${
+                      isActive
+                        ? "bg-blue-700 text-white border-blue-700 shadow-2xs"
+                        : "bg-white text-blue-800 border-blue-200 hover:bg-blue-50"
+                    } disabled:opacity-75 disabled:cursor-not-allowed`}
+                  >
+                    {isActive ? "✓ " : "+ "}{m.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Celana & Training */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-bold text-purple-500 uppercase w-14 shrink-0">Bawahan:</span>
+              {PRESET_MODELS.filter((p) => p.category === "celana").map((m) => {
+                const isActive = activeModels.includes(m.key)
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    disabled={isLocked || isDesignerRole}
+                    onClick={() => toggleModel(m.key)}
+                    className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors cursor-pointer border ${
+                      isActive
+                        ? "bg-purple-700 text-white border-purple-700 shadow-2xs"
+                        : "bg-white text-purple-800 border-purple-200 hover:bg-purple-50"
+                    } disabled:opacity-75 disabled:cursor-not-allowed`}
+                  >
+                    {isActive ? "✓ " : "+ "}{m.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Tambah Model Kustom Lain */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-zinc-200/60">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase w-14 shrink-0">Kustom:</span>
+              {activeModels
+                .filter((m) => !PRESET_MODELS.some((p) => p.key === m))
+                .map((m) => (
+                  <span
+                    key={m}
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-emerald-700 text-white text-xs font-bold border border-emerald-800 shadow-2xs"
+                  >
+                    <span>✓ {m}</span>
+                    {!isLocked && !isDesignerRole && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveModel(m)}
+                        className="hover:text-red-200 font-bold ml-1 cursor-pointer"
+                        title="Hapus Model Ini"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </span>
+                ))}
+
+              {!isLocked && !isDesignerRole && (
+                <div className="inline-flex items-center gap-1">
+                  <input
+                    type="text"
+                    placeholder="Ketik model lain (cth: Singlet)..."
+                    value={customModelInput}
+                    onChange={(e) => setCustomModelInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddCustomModel(); } }}
+                    className="px-2 py-0.5 text-xs border border-zinc-300 rounded bg-white w-44"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddCustomModel}
+                    className="px-2 py-0.5 bg-zinc-800 text-white rounded text-xs font-bold hover:bg-zinc-700 cursor-pointer"
+                  >
+                    + Tambah
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 2. Dua Tabel Matriks Ukuran (Anak & Dewasa) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* 1. Kategori Anak (Sebelah Kiri) */}
-            <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/40 space-y-2">
+            {/* Kategori Anak */}
+            <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/40 space-y-2 overflow-x-auto">
               <div className="flex items-center justify-between border-b border-zinc-200 pb-1">
                 <span className="text-xs font-bold text-zinc-800 uppercase flex items-center gap-1">
                   🧒 Kategori Anak
                 </span>
                 <span className="font-mono text-[11px] font-bold text-zinc-700">
-                  Subtotal: {matrixTotals.kidBaju} Baju {packageType === "STELAN" && `• ${matrixTotals.kidCelana} Celana`}
+                  Total Anak: {matrixTotals.kidTotalPcs} pcs
                 </span>
               </div>
 
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs min-w-full">
                 <thead>
                   <tr className="text-zinc-600 font-semibold uppercase text-[10px] border-b border-zinc-200">
-                    <th className="py-1 px-2 w-20">Ukuran</th>
-                    <th className="py-1 px-2 text-center">Pendek</th>
-                    <th className="py-1 px-2 text-center">Panjang</th>
-                    {packageType === "STELAN" && <th className="py-1 px-2 text-center bg-purple-50 text-purple-900">Celana</th>}
-                    <th className="py-1 px-2 text-right">Subtotal</th>
+                    <th className="py-1 px-1.5 w-16">Ukuran</th>
+                    {activeModels.map((m) => (
+                      <th key={m} className="py-1 px-1 text-center font-bold text-zinc-800 truncate max-w-[85px]" title={m}>
+                        {m}
+                      </th>
+                    ))}
+                    <th className="py-1 px-1.5 text-right w-14">Subtotal</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-200">
                   {KID_SIZES.map((sz) => {
-                    const row = kidMatrix[sz] || { pendek: 0, panjang: 0, celana: 0 }
-                    const subBaju = Number(row.pendek || 0) + Number(row.panjang || 0)
+                    const row = kidMatrix[sz] || {}
+                    const rowSubtotal = activeModels.reduce((sum, m) => sum + Number(row[m] || 0), 0)
 
                     return (
                       <tr key={sz} className="hover:bg-zinc-100/60">
-                        <td className="py-1 px-2 font-bold font-mono text-zinc-800 text-[11px]">{sz}</td>
-                        <td className="py-1 px-2 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            value={row.pendek || ""}
-                            onChange={(e) => handleKidChange(sz, "pendek", Number(e.target.value) || 0)}
-                            className="w-14 text-center py-0.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900"
-                            placeholder="0"
-                          />
-                        </td>
-                        <td className="py-1 px-2 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            value={row.panjang || ""}
-                            onChange={(e) => handleKidChange(sz, "panjang", Number(e.target.value) || 0)}
-                            className="w-14 text-center py-0.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900"
-                            placeholder="0"
-                          />
-                        </td>
-                        {packageType === "STELAN" && (
-                          <td className="py-1 px-2 text-center bg-purple-50/50">
+                        <td className="py-1 px-1.5 font-bold font-mono text-zinc-800 text-[11px]">{sz}</td>
+                        {activeModels.map((m) => (
+                          <td key={m} className="py-1 px-1 text-center">
                             <input
                               type="number"
                               min="0"
-                              value={row.celana || ""}
-                              onChange={(e) => handleKidChange(sz, "celana", Number(e.target.value) || 0)}
-                              className="w-14 text-center py-0.5 border border-purple-300 rounded font-mono text-xs focus:ring-1 focus:ring-purple-900 bg-white"
+                              disabled={isLocked || isDesignerRole}
+                              value={row[m] || ""}
+                              onChange={(e) => handleMatrixChange("kid", sz, m, Number(e.target.value) || 0)}
+                              className="w-12 text-center py-0.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900 bg-white disabled:bg-zinc-100"
                               placeholder="0"
                             />
                           </td>
-                        )}
-                        <td className="py-1 px-2 text-right font-mono font-bold text-zinc-900">
-                          {subBaju} pcs
+                        ))}
+                        <td className="py-1 px-1.5 text-right font-mono font-bold text-zinc-900">
+                          {rowSubtotal}
                         </td>
                       </tr>
                     )
@@ -1541,69 +1644,52 @@ export default function OrderDetailPage() {
               </table>
             </div>
 
-            {/* 2. Kategori Dewasa (Sebelah Kanan) */}
-            <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/40 space-y-2">
+            {/* Kategori Dewasa */}
+            <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/40 space-y-2 overflow-x-auto">
               <div className="flex items-center justify-between border-b border-zinc-200 pb-1">
                 <span className="text-xs font-bold text-zinc-800 uppercase flex items-center gap-1">
                   👕 Kategori Dewasa
                 </span>
                 <span className="font-mono text-[11px] font-bold text-zinc-700">
-                  Subtotal: {matrixTotals.adultBaju} Baju {packageType === "STELAN" && `• ${matrixTotals.adultCelana} Celana`}
+                  Total Dewasa: {matrixTotals.adultTotalPcs} pcs
                 </span>
               </div>
 
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs min-w-full">
                 <thead>
                   <tr className="text-zinc-600 font-semibold uppercase text-[10px] border-b border-zinc-200">
-                    <th className="py-1 px-2 w-16">Ukuran</th>
-                    <th className="py-1 px-2 text-center">Pendek</th>
-                    <th className="py-1 px-2 text-center">Panjang</th>
-                    {packageType === "STELAN" && <th className="py-1 px-2 text-center bg-purple-50 text-purple-900">Celana</th>}
-                    <th className="py-1 px-2 text-right">Subtotal</th>
+                    <th className="py-1 px-1.5 w-14">Ukuran</th>
+                    {activeModels.map((m) => (
+                      <th key={m} className="py-1 px-1 text-center font-bold text-zinc-800 truncate max-w-[85px]" title={m}>
+                        {m}
+                      </th>
+                    ))}
+                    <th className="py-1 px-1.5 text-right w-14">Subtotal</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-200">
                   {ADULT_SIZES.map((sz) => {
-                    const row = adultMatrix[sz] || { pendek: 0, panjang: 0, celana: 0 }
-                    const subBaju = Number(row.pendek || 0) + Number(row.panjang || 0)
+                    const row = adultMatrix[sz] || {}
+                    const rowSubtotal = activeModels.reduce((sum, m) => sum + Number(row[m] || 0), 0)
 
                     return (
                       <tr key={sz} className="hover:bg-zinc-100/60">
-                        <td className="py-1 px-2 font-bold font-mono text-zinc-800">{sz}</td>
-                        <td className="py-1 px-2 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            value={row.pendek || ""}
-                            onChange={(e) => handleAdultChange(sz, "pendek", Number(e.target.value) || 0)}
-                            className="w-14 text-center py-0.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900"
-                            placeholder="0"
-                          />
-                        </td>
-                        <td className="py-1 px-2 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            value={row.panjang || ""}
-                            onChange={(e) => handleAdultChange(sz, "panjang", Number(e.target.value) || 0)}
-                            className="w-14 text-center py-0.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900"
-                            placeholder="0"
-                          />
-                        </td>
-                        {packageType === "STELAN" && (
-                          <td className="py-1 px-2 text-center bg-purple-50/50">
+                        <td className="py-1 px-1.5 font-bold font-mono text-zinc-800">{sz}</td>
+                        {activeModels.map((m) => (
+                          <td key={m} className="py-1 px-1 text-center">
                             <input
                               type="number"
                               min="0"
-                              value={row.celana || ""}
-                              onChange={(e) => handleAdultChange(sz, "celana", Number(e.target.value) || 0)}
-                              className="w-14 text-center py-0.5 border border-purple-300 rounded font-mono text-xs focus:ring-1 focus:ring-purple-900 bg-white"
+                              disabled={isLocked || isDesignerRole}
+                              value={row[m] || ""}
+                              onChange={(e) => handleMatrixChange("adult", sz, m, Number(e.target.value) || 0)}
+                              className="w-12 text-center py-0.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900 bg-white disabled:bg-zinc-100"
                               placeholder="0"
                             />
                           </td>
-                        )}
-                        <td className="py-1 px-2 text-right font-mono font-bold text-zinc-900">
-                          {subBaju} pcs
+                        ))}
+                        <td className="py-1 px-1.5 text-right font-mono font-bold text-zinc-900">
+                          {rowSubtotal}
                         </td>
                       </tr>
                     )
@@ -1613,25 +1699,20 @@ export default function OrderDetailPage() {
             </div>
           </div>
 
-          {/* Grand Total Bar */}
-          <div className="bg-zinc-900 text-white p-2.5 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+          {/* 3. Baris Grand Total Produksi */}
+          <div className="bg-zinc-900 text-white p-2.5 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-              <span className="font-bold">Grand Total Produksi:</span>
+              <span className="font-bold">Total Rekapitulasi Order:</span>
             </div>
-            <div className="flex items-center gap-3 font-mono text-[11px]">
-              <span>Anak: <strong>{matrixTotals.kidBaju} pcs</strong></span>
-              <span>&bull;</span>
-              <span>Dewasa: <strong>{matrixTotals.adultBaju} pcs</strong></span>
-              {packageType === "STELAN" && (
-                <>
-                  <span>&bull;</span>
-                  <span className="text-purple-300 font-bold">Celana: {matrixTotals.grandTotalCelana} pcs</span>
-                </>
-              )}
-              <span>&bull;</span>
-              <span className="text-emerald-300 font-bold text-xs">
-                TOTAL: {matrixTotals.grandTotalBaju} Stel / Pcs
+            <div className="flex flex-wrap items-center gap-2.5 font-mono text-[11px]">
+              {activeModels.map((m) => (
+                <span key={m} className="bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700">
+                  {m}: <strong className="text-white">{matrixTotals.modelTotals[m] || 0}</strong>
+                </span>
+              ))}
+              <span className="text-emerald-400 font-black text-xs pl-1">
+                GRAND TOTAL: {matrixTotals.grandTotalPcs} Pcs
               </span>
             </div>
           </div>
