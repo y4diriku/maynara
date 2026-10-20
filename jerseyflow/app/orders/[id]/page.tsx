@@ -525,12 +525,6 @@ export default function OrderDetailPage() {
     return STAGES.findIndex((s) => s.key === currentStatus)
   }, [currentStatus])
 
-  ))
-  }
-
-  ))
-  }
-
   const processUploadScreenshot = async (file: File, slot: 1 | 2) => {
     if (!file || !orderId) return
     if (!file.type.startsWith("image/")) {
