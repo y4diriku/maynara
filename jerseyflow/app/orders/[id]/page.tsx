@@ -330,57 +330,182 @@ export default function OrderDetailPage() {
     loadData()
   }, [orderId])
 
+    // Deteksi Kategori yang Sedang Aktif
+  const hasJersey = activeModels.some((m) =>
+    ["Lengan Pendek", "Lengan Panjang", "Raglan Pendek", "Raglan Panjang"].includes(m)
+  )
+  const hasJaket = activeModels.some((m) =>
+    ["Jaket Oblong", "Jaket Oblong (+Kupluk)", "Jaket Raglan", "Jaket Raglan (+Kupluk)"].includes(m)
+  )
+  const hasCelanaPendek = activeModels.includes("Celana Pendek")
+  const hasTraining = activeModels.includes("Celana Training")
+
+  // Handler Selektor Model Dinamis
+  const toggleModel = (modelKey: string) => {
+    setActiveModels((prev) => {
+      if (prev.includes(modelKey)) {
+        if (prev.length === 1) {
+          alert("Minimal harus ada 1 model yang aktif.")
+          return prev
+        }
+        return prev.filter((m) => m !== modelKey)
+      } else {
+        return [...prev, modelKey]
+      }
+    })
+  }
+
+  const handleAddCustomModel = () => {
+    const trimmed = customModelInput.trim()
+    if (!trimmed) return
+    if (activeModels.includes(trimmed)) {
+      alert("Model tersebut sudah aktif.")
+      return
+    }
+    setActiveModels((prev) => [...prev, trimmed])
+    setCustomModelInput("")
+  }
+
+  const handleRemoveModel = (modelKey: string) => {
+    if (activeModels.length === 1) {
+      alert("Minimal harus ada 1 model aktif.")
+      return
+    }
+    setActiveModels((prev) => prev.filter((m) => m !== modelKey))
+  }
+
+  const handleMatrixChange = (
+    category: "adult" | "kid",
+    size: string,
+    model: string,
+    val: number
+  ) => {
+    const setter = category === "adult" ? setAdultMatrix : setKidMatrix
+    setter((prev) => ({
+      ...prev,
+      [size]: {
+        ...(prev[size] || {}),
+        [model]: val >= 0 ? val : 0,
+      },
+    }))
+  }
+
+  // Kalkulasi Matriks Ukuran Multi-Model
   const matrixTotals = useMemo(() => {
-    let adultPendek = 0, adultPanjang = 0, adultCelana = 0
+    const modelTotals: Record<string, number> = {}
+    activeModels.forEach((m) => { modelTotals[m] = 0 })
+
+    let adultTotalPcs = 0
     ADULT_SIZES.forEach((sz) => {
-      adultPendek += Number(adultMatrix[sz]?.pendek || 0)
-      adultPanjang += Number(adultMatrix[sz]?.panjang || 0)
-      adultCelana += Number(adultMatrix[sz]?.celana || 0)
+      const row = adultMatrix[sz] || {}
+      activeModels.forEach((m) => {
+        const count = Number(row[m] || 0)
+        modelTotals[m] = (modelTotals[m] || 0) + count
+        adultTotalPcs += count
+      })
     })
-    const adultBaju = adultPendek + adultPanjang
 
-    let kidPendek = 0, kidPanjang = 0, kidCelana = 0
+    let kidTotalPcs = 0
     KID_SIZES.forEach((sz) => {
-      kidPendek += Number(kidMatrix[sz]?.pendek || 0)
-      kidPanjang += Number(kidMatrix[sz]?.panjang || 0)
-      kidCelana += Number(kidMatrix[sz]?.celana || 0)
+      const row = kidMatrix[sz] || {}
+      activeModels.forEach((m) => {
+        const count = Number(row[m] || 0)
+        modelTotals[m] = (modelTotals[m] || 0) + count
+        kidTotalPcs += count
+      })
     })
-    const kidBaju = kidPendek + kidPanjang
 
-    const grandTotalBaju = adultBaju + kidBaju
-    const grandTotalCelana = adultCelana + kidCelana
-    const totalOrderQty = grandTotalBaju > 0 ? grandTotalBaju : grandTotalCelana
+    const grandTotalPcs = adultTotalPcs + kidTotalPcs
 
     return {
-      adultPendek, adultPanjang, adultCelana, adultBaju,
-      kidPendek, kidPanjang, kidCelana, kidBaju,
-      grandTotalBaju, grandTotalCelana, totalOrderQty
+      modelTotals,
+      adultTotalPcs,
+      kidTotalPcs,
+      grandTotalPcs,
+      totalOrderQty: grandTotalPcs,
     }
-  }, [adultMatrix, kidMatrix])
+  }, [adultMatrix, kidMatrix, activeModels])
 
+  // Kalkulasi Harga Cerdas Kategori + Override Borongan
   const totalPrice = useMemo(() => {
+    if (isManualPrice) {
+      return manualTotalPrice > 0 ? manualTotalPrice : 0
+    }
+
     let subtotal = 0
+
+    // 1. Dewasa
     ADULT_SIZES.forEach((sz) => {
       const isJumbo = sz === "2XL" || sz === "3XL" || sz === "4XL"
       const jumboSurcharge = isJumbo ? feeJumbo : 0
-      const p = Number(adultMatrix[sz]?.pendek || 0)
-      const pj = Number(adultMatrix[sz]?.panjang || 0)
-      const c = Number(adultMatrix[sz]?.celana || 0)
-      subtotal += p * (priceAdult + jumboSurcharge)
-      subtotal += pj * (priceAdult + jumboSurcharge + feeLongSleeve)
-      if (packageType === "STELAN") subtotal += c * pricePants
+      const row = adultMatrix[sz] || {}
+
+      activeModels.forEach((m) => {
+        const qty = Number(row[m] || 0)
+        if (qty <= 0) return
+
+        if (m === "Lengan Pendek" || m === "Raglan Pendek") {
+          subtotal += qty * (priceAdult + jumboSurcharge)
+        } else if (m === "Lengan Panjang" || m === "Raglan Panjang") {
+          subtotal += qty * (priceAdult + jumboSurcharge + feeLongSleeve)
+        } else if (m === "Jaket Oblong" || m === "Jaket Raglan") {
+          subtotal += qty * (priceJacket + jumboSurcharge)
+        } else if (m === "Jaket Oblong (+Kupluk)" || m === "Jaket Raglan (+Kupluk)") {
+          subtotal += qty * (priceJacket + jumboSurcharge + feeHoodie)
+        } else if (m === "Celana Pendek") {
+          subtotal += qty * pricePants
+        } else if (m === "Celana Training") {
+          subtotal += qty * priceTraining
+        } else {
+          subtotal += qty * (priceAdult + jumboSurcharge)
+        }
+      })
     })
+
+    // 2. Anak
     KID_SIZES.forEach((sz) => {
-      const p = Number(kidMatrix[sz]?.pendek || 0)
-      const pj = Number(kidMatrix[sz]?.panjang || 0)
-      const c = Number(kidMatrix[sz]?.celana || 0)
-      subtotal += p * priceKid
-      subtotal += pj * (priceKid + feeLongSleeve)
-      if (packageType === "STELAN") subtotal += c * pricePants
+      const row = kidMatrix[sz] || {}
+
+      activeModels.forEach((m) => {
+        const qty = Number(row[m] || 0)
+        if (qty <= 0) return
+
+        if (m === "Lengan Pendek" || m === "Raglan Pendek") {
+          subtotal += qty * priceKid
+        } else if (m === "Lengan Panjang" || m === "Raglan Panjang") {
+          subtotal += qty * (priceKid + feeLongSleeve)
+        } else if (m === "Jaket Oblong" || m === "Jaket Raglan") {
+          subtotal += qty * priceJacket
+        } else if (m === "Jaket Oblong (+Kupluk)" || m === "Jaket Raglan (+Kupluk)") {
+          subtotal += qty * (priceJacket + feeHoodie)
+        } else if (m === "Celana Pendek") {
+          subtotal += qty * pricePants
+        } else if (m === "Celana Training") {
+          subtotal += qty * priceTraining
+        } else {
+          subtotal += qty * priceKid
+        }
+      })
     })
+
     const finalCalc = subtotal - discountAmount
     return finalCalc > 0 ? finalCalc : 0
-  }, [adultMatrix, kidMatrix, priceAdult, priceKid, pricePants, feeLongSleeve, feeJumbo, packageType, discountAmount])
+  }, [
+    isManualPrice,
+    manualTotalPrice,
+    adultMatrix,
+    kidMatrix,
+    activeModels,
+    priceAdult,
+    priceKid,
+    feeLongSleeve,
+    priceJacket,
+    feeHoodie,
+    pricePants,
+    priceTraining,
+    feeJumbo,
+    discountAmount
+  ])
 
   const sisaPiutang = useMemo(() => {
     const sisa = totalPrice - downPayment
@@ -400,18 +525,10 @@ export default function OrderDetailPage() {
     return STAGES.findIndex((s) => s.key === currentStatus)
   }, [currentStatus])
 
-  const handleAdultChange = (sz: string, field: keyof SizeRow, val: number) => {
-    setAdultMatrix((prev) => ({
-      ...prev,
-      [sz]: { ...prev[sz], [field]: val >= 0 ? val : 0 }
-    }))
+  ))
   }
 
-  const handleKidChange = (sz: string, field: keyof SizeRow, val: number) => {
-    setKidMatrix((prev) => ({
-      ...prev,
-      [sz]: { ...prev[sz], [field]: val >= 0 ? val : 0 }
-    }))
+  ))
   }
 
   const processUploadScreenshot = async (file: File, slot: 1 | 2) => {
