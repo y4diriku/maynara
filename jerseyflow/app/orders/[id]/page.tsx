@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { compressImage } from "@/lib/imageCompressor"
 import Link from "next/link"
@@ -23,7 +23,11 @@ import {
   CheckCircle2,
   Clock,
   Lock,
-  AlertTriangle
+  AlertTriangle,
+  Share2,
+  Copy,
+  ExternalLink,
+  MessageSquare
 } from "lucide-react"
 
 interface PartnerItem {
@@ -31,33 +35,11 @@ interface PartnerItem {
   name: string
 }
 
-interface SizeRow {
-  pendek: number
-  panjang: number
-  celana: number
-}
+type DynamicSizeMatrix = Record<string, Record<string, number>>
 
-type SizeMatrix = Record<string, SizeRow>
+import { FABRIC_OPTIONS, COLLAR_OPTIONS, CUSTOM_OPTION_VALUE, INK_PROFILES, PRESET_MODELS, ADULT_SIZES, KID_SIZES } from "@/lib/constants"
 
-const FABRIC_OPTIONS = [
-  "Dryfit Milano",
-  "Dryfit Jarum",
-  "Dryfit Bintik",
-  "Dryfit Benzema",
-  "Serena Super",
-  "Polyester Standard"
-]
 
-const COLLAR_OPTIONS = [
-  "O-Neck Standar",
-  "V-Neck Standar",
-  "V-Neck Variasi / Rib",
-  "Kerah Polo Kancing",
-  "Kerah Mandarin / Sanghai"
-]
-
-const ADULT_SIZES = ["S", "M", "L", "XL", "2XL", "3XL"]
-const KID_SIZES = ["S Anak", "M Anak", "L Anak", "XL Anak"]
 
 const STAGES = [
   { key: "DESIGN_QUEUE", label: "Desain", code: "01", accent: "bg-blue-600" },
@@ -81,6 +63,7 @@ function parseRibuan(str: string): number {
 }
 
 export default function OrderDetailPage() {
+  const router = useRouter()
   const params = useParams()
   const orderId = params?.id as string
 
@@ -91,6 +74,11 @@ export default function OrderDetailPage() {
   const [cancelReason, setCancelReason] = useState("")
   const [cancelling, setCancelling] = useState(false)
 
+  // State Modal Pelacakan Konsumen & WhatsApp
+  const [showTrackingModal, setShowTrackingModal] = useState(false)
+  const [copiedLink, setCopiedLink] = useState(false)
+  const [customerPhoneInput, setCustomerPhoneInput] = useState("")
+
   // Identitas & Status
   const [orderNumber, setOrderNumber] = useState("")
   const [orderTitle, setOrderTitle] = useState("")
@@ -100,24 +88,43 @@ export default function OrderDetailPage() {
 
   // Parameter Spesifikasi, Paket, Tinta, Tipe & Lokasi
   const [fabricType, setFabricType] = useState("")
+  const [isCustomFabric, setIsCustomFabric] = useState(false)
+  const [customFabric, setCustomFabric] = useState("")
+
   const [collarType, setCollarType] = useState("")
+  const [isCustomCollar, setIsCustomCollar] = useState(false)
+  const [customCollar, setCustomCollar] = useState("")
   const [deadlineDate, setDeadlineDate] = useState("")
   const [packageType, setPackageType] = useState<"ATASAN" | "STELAN">("ATASAN")
   const [inkType, setInkType] = useState<"ORI" | "CINA">("ORI")
+  const [inkProfile, setInkProfile] = useState<string>("952")
   const [orderType, setOrderType] = useState<"FULL_ORDER" | "PRINT_PRESS">("FULL_ORDER")
   const [designLocation, setDesignLocation] = useState<"DISINI" | "LUAR">("DISINI")
   const [cuttingLocation, setCuttingLocation] = useState<"DISINI" | "LUAR">("DISINI")
 
-  // Matriks Ukuran
-  const [adultMatrix, setAdultMatrix] = useState<SizeMatrix>(() => {
-    const init: SizeMatrix = {}
-    ADULT_SIZES.forEach((sz) => { init[sz] = { pendek: 0, panjang: 0, celana: 0 } })
+  // Model Aktif & Kustom
+  const [activeModels, setActiveModels] = useState<string[]>(["Lengan Pendek", "Lengan Panjang"])
+  const [customModelInput, setCustomModelInput] = useState("")
+
+  // State Biaya Dinamis Berbasis Kategori
+  const [priceJacket, setPriceJacket] = useState<number>(0)
+  const [feeHoodie, setFeeHoodie] = useState<number>(0)
+  const [priceTraining, setPriceTraining] = useState<number>(0)
+
+  // Sakelar Kunci Harga Paket Borongan (Override Manual)
+  const [isManualPrice, setIsManualPrice] = useState(false)
+  const [manualTotalPrice, setManualTotalPrice] = useState<number>(0)
+
+  // Matriks Ukuran Dinamis
+  const [adultMatrix, setAdultMatrix] = useState<DynamicSizeMatrix>(() => {
+    const init: DynamicSizeMatrix = {}
+    ADULT_SIZES.forEach((sz) => { init[sz] = {} })
     return init
   })
 
-  const [kidMatrix, setKidMatrix] = useState<SizeMatrix>(() => {
-    const init: SizeMatrix = {}
-    KID_SIZES.forEach((sz) => { init[sz] = { pendek: 0, panjang: 0, celana: 0 } })
+  const [kidMatrix, setKidMatrix] = useState<DynamicSizeMatrix>(() => {
+    const init: DynamicSizeMatrix = {}
+    KID_SIZES.forEach((sz) => { init[sz] = {} })
     return init
   })
 
@@ -151,6 +158,7 @@ export default function OrderDetailPage() {
   const [mockupUrl2, setMockupUrl2] = useState<string | null>(null)
   const [mockupUrl3, setMockupUrl3] = useState<string | null>(null)
   const [uploadingSlot, setUploadingSlot] = useState<number | null>(null)
+  const [dragTarget, setDragTarget] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadData() {
@@ -172,17 +180,57 @@ export default function OrderDetailPage() {
       setOrderNumber(oData.order_number)
       setOrderTitle(oData.order_title || "")
       setCustomerName(oData.customer_name)
-      setFabricType(oData.fabric_type || FABRIC_OPTIONS[0])
-      setCollarType(oData.collar_type || COLLAR_OPTIONS[0])
+      if (oData.customer_phone && oData.customer_phone !== "-") {
+        setCustomerPhoneInput(oData.customer_phone)
+      }
+      const rawFabric = oData.fabric_type || ""
+      if (rawFabric && !FABRIC_OPTIONS.includes(rawFabric)) {
+        setIsCustomFabric(true)
+        setCustomFabric(rawFabric)
+        setFabricType(CUSTOM_OPTION_VALUE)
+      } else {
+        setIsCustomFabric(false)
+        setCustomFabric("")
+        setFabricType(rawFabric || FABRIC_OPTIONS[0])
+      }
+
+      const rawCollar = oData.collar_type || ""
+      if (rawCollar && !COLLAR_OPTIONS.includes(rawCollar)) {
+        setIsCustomCollar(true)
+        setCustomCollar(rawCollar)
+        setCollarType(CUSTOM_OPTION_VALUE)
+      } else {
+        setIsCustomCollar(false)
+        setCustomCollar("")
+        setCollarType(rawCollar || COLLAR_OPTIONS[0])
+      }
       setDeadlineDate(oData.deadline_date)
       setPriority(oData.priority || "NORMAL")
       setPackageType((oData.package_type as any) || "ATASAN")
-      setInkType((oData.ink_type as any) || "ORI")
+      const loadedInkType = (oData.ink_type as any) || "ORI"
+      setInkType(loadedInkType)
+      setInkProfile(oData.ink_profile || (loadedInkType === "CINA" ? "2 PAS" : "952"))
       setOrderType((oData.order_type as any) || "FULL_ORDER")
       setDesignLocation((oData.design_location as any) || "DISINI")
       setCuttingLocation((oData.cutting_location as any) || "DISINI")
 
       setDownPayment(Number(oData.down_payment) || 0)
+      
+      // Ambil role user login & verifikasi akses
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        const { data: prof } = await supabase.from("profiles").select("role").eq("id", session.user.id).single()
+        if (prof?.role) {
+          const r = prof.role.toUpperCase()
+          setUserRole(r)
+          const isDesigner = r.includes("DESIGN") || r === "OPERATOR_DESIGN" || r === "DESIGNER"
+          const isAuthorized = r === "OWNER" || r === "ADMIN" || r === "ACCOUNTING" || isDesigner
+          if (!isAuthorized) {
+            router.replace("/")
+            return
+          }
+        }
+      }
       setCurrentStatus(oData.current_status)
       setProductionNotes(oData.production_notes || "")
       setCatatanDesain(oData.catatan_desain || "")
@@ -201,28 +249,66 @@ export default function OrderDetailPage() {
         setPriceAdult(Number(oData.pricing_config.priceAdult || 0))
         setPriceKid(Number(oData.pricing_config.priceKid || 0))
         setPricePants(Number(oData.pricing_config.pricePants || 0))
+        setPriceJacket(Number(oData.pricing_config.priceJacket || 0))
+        setPriceTraining(Number(oData.pricing_config.priceTraining || 0))
         setFeeLongSleeve(Number(oData.pricing_config.feeLongSleeve || 0))
+        setFeeHoodie(Number(oData.pricing_config.feeHoodie || 0))
         setFeeJumbo(Number(oData.pricing_config.feeJumbo || 0))
         setDiscountAmount(Number(oData.pricing_config.discountAmount || 0))
+        setIsManualPrice(Boolean(oData.pricing_config.isManualPrice))
+        setManualTotalPrice(Number(oData.pricing_config.manualTotalPrice || 0))
       }
 
-      // Memuat Matriks Ukuran dari JSONB
+      // Memuat Matriks Ukuran dari JSONB (dengan Backward Compatibility otomatis)
       if (oData.size_breakdown && typeof oData.size_breakdown === "object") {
         const bd = oData.size_breakdown
-        if (bd.adult) {
-          setAdultMatrix((prev) => {
-            const next = { ...prev }
-            ADULT_SIZES.forEach((sz) => { if (bd.adult[sz]) next[sz] = bd.adult[sz] })
-            return next
-          })
+        let loadedActiveModels: string[] = []
+
+        if (Array.isArray(bd.active_models) && bd.active_models.length > 0) {
+          loadedActiveModels = bd.active_models
+        } else {
+          // Migrasi otomatis data format lama
+          loadedActiveModels = ["Lengan Pendek", "Lengan Panjang"]
+          const hasCelana =
+            Object.values(bd.adult || {}).some((r: any) => Number(r?.celana || 0) > 0) ||
+            Object.values(bd.kid || {}).some((r: any) => Number(r?.celana || 0) > 0)
+          if (hasCelana) loadedActiveModels.push("Celana Pendek")
         }
-        if (bd.kid) {
-          setKidMatrix((prev) => {
-            const next = { ...prev }
-            KID_SIZES.forEach((sz) => { if (bd.kid[sz]) next[sz] = bd.kid[sz] })
-            return next
-          })
-        }
+        setActiveModels(loadedActiveModels)
+
+        // Matriks Dewasa
+        const nextAdult: DynamicSizeMatrix = {}
+        ADULT_SIZES.forEach((sz) => {
+          nextAdult[sz] = {}
+          const row = bd.adult?.[sz] || {}
+          if ("pendek" in row || "panjang" in row || "celana" in row) {
+            if (row.pendek) nextAdult[sz]["Lengan Pendek"] = Number(row.pendek)
+            if (row.panjang) nextAdult[sz]["Lengan Panjang"] = Number(row.panjang)
+            if (row.celana) nextAdult[sz]["Celana Pendek"] = Number(row.celana)
+          } else {
+            loadedActiveModels.forEach((m) => {
+              if (row[m]) nextAdult[sz][m] = Number(row[m])
+            })
+          }
+        })
+        setAdultMatrix(nextAdult)
+
+        // Matriks Anak
+        const nextKid: DynamicSizeMatrix = {}
+        KID_SIZES.forEach((sz) => {
+          nextKid[sz] = {}
+          const row = bd.kid?.[sz] || {}
+          if ("pendek" in row || "panjang" in row || "celana" in row) {
+            if (row.pendek) nextKid[sz]["Lengan Pendek"] = Number(row.pendek)
+            if (row.panjang) nextKid[sz]["Lengan Panjang"] = Number(row.panjang)
+            if (row.celana) nextKid[sz]["Celana Pendek"] = Number(row.celana)
+          } else {
+            loadedActiveModels.forEach((m) => {
+              if (row[m]) nextKid[sz][m] = Number(row[m])
+            })
+          }
+        })
+        setKidMatrix(nextKid)
       }
 
       setLoadingPartners(true)
@@ -301,8 +387,12 @@ export default function OrderDetailPage() {
     return sisa > 0 ? sisa : 0
   }, [totalPrice, downPayment])
 
+  const [userRole, setUserRole] = useState<string>("")
   const isArchived = currentStatus === "COMPLETED"
   const isCancelled = currentStatus === "CANCELLED"
+  
+  // Desainer boleh upload mockup & simpan, tapi form spesifikasi/harga tetap read-only
+  const isDesignerRole = userRole.includes("DESIGN") || userRole === "OPERATOR_DESIGN" || userRole === "DESIGNER"
   const isLocked = isArchived || isCancelled
 
   const activeStageIndex = useMemo(() => {
@@ -324,9 +414,12 @@ export default function OrderDetailPage() {
     }))
   }
 
-  const handleUploadScreenshot = async (e: React.ChangeEvent<HTMLInputElement>, slot: 1 | 2) => {
-    const file = e.target.files?.[0]
+  const processUploadScreenshot = async (file: File, slot: 1 | 2) => {
     if (!file || !orderId) return
+    if (!file.type.startsWith("image/")) {
+      alert("Harap pilih atau drag file gambar (JPG, PNG, WEBP).")
+      return
+    }
 
     if (slot === 1) setUploadingScreenshot(true)
     else setUploadingScreenshot2(true)
@@ -364,6 +457,11 @@ export default function OrderDetailPage() {
     }
   }
 
+  const handleUploadScreenshot = (e: React.ChangeEvent<HTMLInputElement>, slot: 1 | 2) => {
+    const file = e.target.files?.[0]
+    if (file) processUploadScreenshot(file, slot)
+  }
+
   const handleDeleteScreenshot = async (slot: 1 | 2) => {
     const colKey = slot === 1 ? "roster_screenshot_url" : "roster_screenshot_url_2"
     await supabase.from("orders").update({ [colKey]: null }).eq("id", orderId)
@@ -371,9 +469,12 @@ export default function OrderDetailPage() {
     else setRosterScreenshotUrl2(null)
   }
 
-  const handleUploadMockup = async (e: React.ChangeEvent<HTMLInputElement>, slot: 1 | 2 | 3) => {
-    const file = e.target.files?.[0]
+  const processUploadMockup = async (file: File, slot: 1 | 2 | 3) => {
     if (!file || !orderId) return
+    if (!file.type.startsWith("image/")) {
+      alert("Harap pilih atau drag file gambar (JPG, PNG, WEBP).")
+      return
+    }
 
     setUploadingSlot(slot)
     setMsg("")
@@ -404,12 +505,17 @@ export default function OrderDetailPage() {
       else if (slot === 2) setMockupUrl2(freshUrl)
       else setMockupUrl3(freshUrl)
 
-      setMsg(`Gambar ${slot} berhasil diunggah!`)
+      setMsg(`Mockup Gambar ${slot} berhasil diunggah!`)
     } catch (err: any) {
       setMsg("Gagal unggah: " + err.message)
     } finally {
       setUploadingSlot(null)
     }
+  }
+
+  const handleUploadMockup = (e: React.ChangeEvent<HTMLInputElement>, slot: 1 | 2 | 3) => {
+    const file = e.target.files?.[0]
+    if (file) processUploadMockup(file, slot)
   }
 
   const handleDeleteMockup = async (slot: 1 | 2 | 3) => {
@@ -420,6 +526,38 @@ export default function OrderDetailPage() {
     else setMockupUrl3(null)
   }
 
+  // Helper Event Handlers Drag and Drop
+  const handleDragOver = (e: React.DragEvent, targetKey: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (dragTarget !== targetKey) {
+      setDragTarget(targetKey)
+    }
+  }
+
+  const handleDragLeave = (e: React.DragEvent, targetKey: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return
+    setDragTarget((prev) => (prev === targetKey ? null : prev))
+  }
+
+  const handleDropMockup = (e: React.DragEvent, slot: 1 | 2 | 3) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragTarget(null)
+    const file = e.dataTransfer.files?.[0]
+    if (file) processUploadMockup(file, slot)
+  }
+
+  const handleDropScreenshot = (e: React.DragEvent, slot: 1 | 2) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragTarget(null)
+    const file = e.dataTransfer.files?.[0]
+    if (file) processUploadScreenshot(file, slot)
+  }
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
@@ -427,30 +565,38 @@ export default function OrderDetailPage() {
 
     try {
       const isPaid = downPayment >= totalPrice
+      const finalFabric = fabricType === CUSTOM_OPTION_VALUE ? (customFabric.trim() || "Kain Kustom") : fabricType
+      const finalCollar = collarType === CUSTOM_OPTION_VALUE ? (customCollar.trim() || "Kerah Kustom") : collarType
 
       const { error: oErr } = await supabase
         .from("orders")
         .update({
           order_title: orderTitle.trim(),
           customer_name: customerName.trim(),
-          fabric_type: fabricType,
-          collar_type: collarType,
+          fabric_type: finalFabric,
+          collar_type: finalCollar,
           deadline_date: deadlineDate,
           priority: priority,
           package_type: packageType,
           ink_type: inkType,
+          ink_profile: inkProfile,
           order_type: orderType,
           design_location: designLocation,
           cutting_location: cuttingLocation,
-          pricing_config: { priceAdult, priceKid, pricePants, feeLongSleeve, feeJumbo, discountAmount },
+          pricing_config: {
+            priceAdult, priceKid, pricePants, priceJacket, priceTraining,
+            feeLongSleeve, feeHoodie, feeJumbo, discountAmount,
+            isManualPrice, manualTotalPrice
+          },
           size_breakdown: {
+            active_models: activeModels,
             adult: adultMatrix,
             kid: kidMatrix
           },
           roster_wa_text: rosterWaText.trim() || null,
           roster_screenshot_url: rosterScreenshotUrl || null,
           roster_screenshot_url_2: rosterScreenshotUrl2 || null,
-          total_qty: matrixTotals.totalOrderQty,
+          total_qty: matrixTotals.grandTotalPcs,
           total_price: totalPrice,
           down_payment: downPayment,
           is_paid_off: isPaid,
@@ -470,6 +616,38 @@ export default function OrderDetailPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  // Fungsi Handler Pelacakan Konsumen & WhatsApp
+  const trackingUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/track/${orderNumber}`
+    : `/track/${orderNumber}`
+
+  const handleCopyTrackingLink = async () => {
+    try {
+      await navigator.clipboard.writeText(trackingUrl)
+      setCopiedLink(true)
+      setTimeout(() => setCopiedLink(false), 2500)
+    } catch {
+      alert("Gagal menyalin link otomatis.")
+    }
+  }
+
+  const handleSendWA = () => {
+    const cleanPhone = customerPhoneInput.replace(/[^0-9]/g, "")
+    let waPhone = cleanPhone
+    if (waPhone.startsWith("0")) {
+      waPhone = "62" + waPhone.slice(1)
+    }
+
+    const messageText = `Halo Kak *${customerName || "Pelanggan"}*,\n\nBerikut adalah tautan pemantauan langsung (*live tracking*) untuk melihat progres pengerjaan pesanan jersey *${orderTitle || customerName}* di workshop kami:\n\n🔗 ${trackingUrl}\n\n📅 Target Estimasi Selesai: *${deadlineDate || "-"}*\n\nTerima kasih telah mempercayakan produksi Anda kepada kami! 🙏`
+
+    const encodedMsg = encodeURIComponent(messageText)
+    const waUrl = waPhone
+      ? `https://wa.me/${waPhone}?text=${encodedMsg}`
+      : `https://api.whatsapp.com/send?text=${encodedMsg}`
+
+    window.open(waUrl, "_blank")
   }
 
   const handleCancelOrder = async () => {
@@ -516,8 +694,9 @@ export default function OrderDetailPage() {
       <div className="flex items-center justify-between border-b border-zinc-200 pb-3">
         <div className="flex items-center gap-3">
           <Link
-            href="/orders"
+            href={isDesignerRole ? "/orders/studio" : "/orders"}
             className="p-1.5 border border-zinc-200 rounded hover:bg-zinc-100 text-zinc-600 transition-colors"
+            title={isDesignerRole ? "Kembali ke Studio Desain" : "Kembali ke Daftar Pesanan"}
           >
             <ArrowLeft className="h-4 w-4" />
           </Link>
@@ -534,11 +713,20 @@ export default function OrderDetailPage() {
 
         <div className="flex items-center gap-2">
           <Link
-            href="/"
+            href={isDesignerRole ? "/orders/studio" : "/"}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-300 rounded hover:bg-zinc-100 text-zinc-700 text-xs font-semibold shadow-2xs transition-colors"
           >
-            <span>Papan Kanban</span>
+            <span>{isDesignerRole ? "Studio Desain" : "Papan Kanban"}</span>
           </Link>
+          <button
+            type="button"
+            onClick={() => setShowTrackingModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-emerald-600 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+            title="Bagikan Tautan Pelacakan ke Konsumen"
+          >
+            <Share2 className="h-3.5 w-3.5 text-emerald-700" />
+            <span>Pelacakan & WA</span>
+          </button>
           <Link
             href={`/orders/${orderId}/form-order`}
             target="_blank"
@@ -597,6 +785,24 @@ export default function OrderDetailPage() {
           </div>
           <span className="font-mono text-[9px] font-bold bg-white text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded uppercase shrink-0 shadow-2xs">
             ARSIP TERKUNCI
+          </span>
+        </div>
+      )}
+
+      {/* BANNER KHUSUS OPERATOR DESAIN & SETTING */}
+      {isDesignerRole && !isArchived && !isCancelled && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-950 px-3.5 py-2.5 rounded-lg flex items-center justify-between text-xs shadow-2xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0" />
+            <div>
+              <strong className="block font-bold">Mode Akses Desainer & Setting (Read-Only)</strong>
+              <span className="text-[11px] text-blue-800">
+                Spesifikasi dan harga dikunci untuk menjaga integritas data. Anda dapat meninjau ukuran/roster, mengunggah Mockup (Gambar 1, 2, 3), dan mencetak SPK.
+              </span>
+            </div>
+          </div>
+          <span className="font-mono text-[9px] font-bold bg-white text-blue-800 border border-blue-300 px-2 py-0.5 rounded uppercase shrink-0 shadow-2xs">
+            DESAINER AKTIF
           </span>
         </div>
       )}
@@ -670,84 +876,143 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
-      {/* 3. Galeri Mockup Desain (3 Slot) */}
+      {/* 3. Galeri Mockup Desain (3 Slot) - DENGAN FITUR DRAG AND DROP & KLIK */}
       <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
-        <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
-          <ImageIcon className="h-3.5 w-3.5 text-zinc-600" /> Galeri Mockup Desain (Maksimal 3 Gambar)
-        </span>
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-zinc-900 uppercase tracking-tight flex items-center gap-1.5">
+            <ImageIcon className="h-3.5 w-3.5 text-zinc-600" /> Galeri Mockup Desain (Maksimal 3 Gambar)
+          </span>
+          <span className="text-[11px] text-zinc-500 font-medium hidden sm:inline">
+            Tarik & Lepas (Drag & Drop) file gambar langsung ke kotak di bawah
+          </span>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/50 space-y-2">
+          {/* Slot 1 */}
+          <div
+            onDragOver={(e) => handleDragOver(e, "mockup-1")}
+            onDragLeave={(e) => handleDragLeave(e, "mockup-1")}
+            onDrop={(e) => handleDropMockup(e, 1)}
+            className={`border rounded p-2.5 transition-all relative space-y-2 ${
+              dragTarget === "mockup-1"
+                ? "border-blue-600 bg-blue-50 ring-2 ring-blue-400 scale-[1.01]"
+                : "border-zinc-200 bg-zinc-50/50"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-zinc-700">Gambar 1 (Utama)</span>
               {mockupUrl1 && (
-                <button type="button" onClick={() => handleDeleteMockup(1)} className="text-zinc-400 hover:text-red-600 p-0.5">
+                <button type="button" onClick={() => handleDeleteMockup(1)} className="text-zinc-400 hover:text-red-600 p-0.5" title="Hapus Gambar">
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
             {mockupUrl1 ? (
-              <div className="h-36 border border-zinc-200 rounded p-1 flex items-center justify-center bg-white">
+              <div className="h-36 border border-zinc-200 rounded p-1 flex items-center justify-center bg-white relative overflow-hidden group">
                 <img src={mockupUrl1} alt="Gambar 1" className="h-full w-full object-contain" />
+                {dragTarget === "mockup-1" && (
+                  <div className="absolute inset-0 bg-blue-600/80 backdrop-blur-2xs flex items-center justify-center text-white font-bold text-xs animate-in fade-in">
+                    Lepas File untuk Ganti Gambar 1
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="h-36 border border-dashed border-zinc-300 rounded flex items-center justify-center text-zinc-400 text-xs">
-                Slot Kosong
+              <div className={`h-36 border-2 border-dashed rounded flex flex-col items-center justify-center text-xs transition-colors p-2 text-center ${
+                dragTarget === "mockup-1" ? "border-blue-500 bg-blue-100/50 text-blue-700 font-bold" : "border-zinc-300 text-zinc-500"
+              }`}>
+                <UploadCloud className={`h-6 w-6 mb-1 ${dragTarget === "mockup-1" ? "text-blue-600 animate-bounce" : "text-zinc-400"}`} />
+                <span>{dragTarget === "mockup-1" ? "Lepas File di Sini!" : "Drag & drop gambar ke sini"}</span>
               </div>
             )}
-            <label className="cursor-pointer w-full inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-zinc-900 text-white hover:bg-zinc-800 rounded text-xs font-medium transition-colors">
+            <label className="cursor-pointer w-full inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-zinc-900 text-white hover:bg-zinc-800 rounded text-xs font-medium transition-colors shadow-2xs">
               <UploadCloud className="h-3.5 w-3.5" />
-              <span>{uploadingSlot === 1 ? "Mengunggah..." : mockupUrl1 ? "Ganti Gambar" : "Unggah Gambar 1"}</span>
+              <span>{uploadingSlot === 1 ? "Mengunggah..." : mockupUrl1 ? "Pilih Gambar Lain" : "Unggah Gambar 1"}</span>
               <input type="file" accept="image/*" onChange={(e) => handleUploadMockup(e, 1)} disabled={uploadingSlot === 1} className="hidden" />
             </label>
           </div>
 
-          <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/50 space-y-2">
+          {/* Slot 2 */}
+          <div
+            onDragOver={(e) => handleDragOver(e, "mockup-2")}
+            onDragLeave={(e) => handleDragLeave(e, "mockup-2")}
+            onDrop={(e) => handleDropMockup(e, 2)}
+            className={`border rounded p-2.5 transition-all relative space-y-2 ${
+              dragTarget === "mockup-2"
+                ? "border-blue-600 bg-blue-50 ring-2 ring-blue-400 scale-[1.01]"
+                : "border-zinc-200 bg-zinc-50/50"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-zinc-700">Gambar 2 (Opsional)</span>
               {mockupUrl2 && (
-                <button type="button" onClick={() => handleDeleteMockup(2)} className="text-zinc-400 hover:text-red-600 p-0.5">
+                <button type="button" onClick={() => handleDeleteMockup(2)} className="text-zinc-400 hover:text-red-600 p-0.5" title="Hapus Gambar">
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
             {mockupUrl2 ? (
-              <div className="h-36 border border-zinc-200 rounded p-1 flex items-center justify-center bg-white">
+              <div className="h-36 border border-zinc-200 rounded p-1 flex items-center justify-center bg-white relative overflow-hidden group">
                 <img src={mockupUrl2} alt="Gambar 2" className="h-full w-full object-contain" />
+                {dragTarget === "mockup-2" && (
+                  <div className="absolute inset-0 bg-blue-600/80 backdrop-blur-2xs flex items-center justify-center text-white font-bold text-xs animate-in fade-in">
+                    Lepas File untuk Ganti Gambar 2
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="h-36 border border-dashed border-zinc-300 rounded flex items-center justify-center text-zinc-400 text-xs">
-                Slot Kosong
+              <div className={`h-36 border-2 border-dashed rounded flex flex-col items-center justify-center text-xs transition-colors p-2 text-center ${
+                dragTarget === "mockup-2" ? "border-blue-500 bg-blue-100/50 text-blue-700 font-bold" : "border-zinc-300 text-zinc-500"
+              }`}>
+                <UploadCloud className={`h-6 w-6 mb-1 ${dragTarget === "mockup-2" ? "text-blue-600 animate-bounce" : "text-zinc-400"}`} />
+                <span>{dragTarget === "mockup-2" ? "Lepas File di Sini!" : "Drag & drop gambar ke sini"}</span>
               </div>
             )}
-            <label className="cursor-pointer w-full inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-zinc-900 text-white hover:bg-zinc-800 rounded text-xs font-medium transition-colors">
+            <label className="cursor-pointer w-full inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-zinc-900 text-white hover:bg-zinc-800 rounded text-xs font-medium transition-colors shadow-2xs">
               <UploadCloud className="h-3.5 w-3.5" />
-              <span>{uploadingSlot === 2 ? "Mengunggah..." : mockupUrl2 ? "Ganti Gambar" : "Unggah Gambar 2"}</span>
+              <span>{uploadingSlot === 2 ? "Mengunggah..." : mockupUrl2 ? "Pilih Gambar Lain" : "Unggah Gambar 2"}</span>
               <input type="file" accept="image/*" onChange={(e) => handleUploadMockup(e, 2)} disabled={uploadingSlot === 2} className="hidden" />
             </label>
           </div>
 
-          <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/50 space-y-2">
+          {/* Slot 3 */}
+          <div
+            onDragOver={(e) => handleDragOver(e, "mockup-3")}
+            onDragLeave={(e) => handleDragLeave(e, "mockup-3")}
+            onDrop={(e) => handleDropMockup(e, 3)}
+            className={`border rounded p-2.5 transition-all relative space-y-2 ${
+              dragTarget === "mockup-3"
+                ? "border-blue-600 bg-blue-50 ring-2 ring-blue-400 scale-[1.01]"
+                : "border-zinc-200 bg-zinc-50/50"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-zinc-700">Gambar 3 (Opsional)</span>
               {mockupUrl3 && (
-                <button type="button" onClick={() => handleDeleteMockup(3)} className="text-zinc-400 hover:text-red-600 p-0.5">
+                <button type="button" onClick={() => handleDeleteMockup(3)} className="text-zinc-400 hover:text-red-600 p-0.5" title="Hapus Gambar">
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
             {mockupUrl3 ? (
-              <div className="h-36 border border-zinc-200 rounded p-1 flex items-center justify-center bg-white">
+              <div className="h-36 border border-zinc-200 rounded p-1 flex items-center justify-center bg-white relative overflow-hidden group">
                 <img src={mockupUrl3} alt="Gambar 3" className="h-full w-full object-contain" />
+                {dragTarget === "mockup-3" && (
+                  <div className="absolute inset-0 bg-blue-600/80 backdrop-blur-2xs flex items-center justify-center text-white font-bold text-xs animate-in fade-in">
+                    Lepas File untuk Ganti Gambar 3
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="h-36 border border-dashed border-zinc-300 rounded flex items-center justify-center text-zinc-400 text-xs">
-                Slot Kosong
+              <div className={`h-36 border-2 border-dashed rounded flex flex-col items-center justify-center text-xs transition-colors p-2 text-center ${
+                dragTarget === "mockup-3" ? "border-blue-500 bg-blue-100/50 text-blue-700 font-bold" : "border-zinc-300 text-zinc-500"
+              }`}>
+                <UploadCloud className={`h-6 w-6 mb-1 ${dragTarget === "mockup-3" ? "text-blue-600 animate-bounce" : "text-zinc-400"}`} />
+                <span>{dragTarget === "mockup-3" ? "Lepas File di Sini!" : "Drag & drop gambar ke sini"}</span>
               </div>
             )}
-            <label className="cursor-pointer w-full inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-zinc-900 text-white hover:bg-zinc-800 rounded text-xs font-medium transition-colors">
+            <label className="cursor-pointer w-full inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-zinc-900 text-white hover:bg-zinc-800 rounded text-xs font-medium transition-colors shadow-2xs">
               <UploadCloud className="h-3.5 w-3.5" />
-              <span>{uploadingSlot === 3 ? "Mengunggah..." : mockupUrl3 ? "Ganti Gambar" : "Unggah Gambar 3"}</span>
+              <span>{uploadingSlot === 3 ? "Mengunggah..." : mockupUrl3 ? "Pilih Gambar Lain" : "Unggah Gambar 3"}</span>
               <input type="file" accept="image/*" onChange={(e) => handleUploadMockup(e, 3)} disabled={uploadingSlot === 3} className="hidden" />
             </label>
           </div>
@@ -755,7 +1020,7 @@ export default function OrderDetailPage() {
       </div>
 
       <form onSubmit={handleSave} className="space-y-4">
-        <fieldset disabled={isLocked} className="space-y-4 border-0 p-0 m-0 disabled:opacity-90 contents">
+        <fieldset disabled={isLocked || isDesignerRole} className="space-y-4 border-0 p-0 m-0 disabled:opacity-90 contents">
         {/* Parameter Utama 3 Kolom */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="border border-zinc-200 bg-white p-3.5 rounded shadow-2xs space-y-3">
@@ -836,21 +1101,51 @@ export default function OrderDetailPage() {
                   <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">Bahan Kain</label>
                   <select
                     value={fabricType}
-                    onChange={(e) => setFabricType(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setFabricType(val)
+                      setIsCustomFabric(val === CUSTOM_OPTION_VALUE)
+                    }}
                     className="w-full px-2 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white text-[11px]"
                   >
                     {FABRIC_OPTIONS.map((f) => (<option key={f} value={f}>{f}</option>))}
+                    <option value={CUSTOM_OPTION_VALUE}>+ Kustom / Lainnya (Ketik Manual)</option>
                   </select>
+                  {isCustomFabric && (
+                    <input
+                      type="text"
+                      placeholder="Ketik nama bahan..."
+                      value={customFabric}
+                      onChange={(e) => setCustomFabric(e.target.value)}
+                      className="w-full px-2 py-1 border border-blue-400 bg-blue-50/50 rounded focus:ring-1 focus:ring-blue-600 focus:outline-none text-[10.5px] font-semibold text-blue-900 mt-1"
+                      required
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="block text-zinc-600 font-medium mb-0.5 text-[10px]">Model Kerah</label>
                   <select
                     value={collarType}
-                    onChange={(e) => setCollarType(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setCollarType(val)
+                      setIsCustomCollar(val === CUSTOM_OPTION_VALUE)
+                    }}
                     className="w-full px-2 py-1.5 border border-zinc-300 rounded focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white text-[11px]"
                   >
                     {COLLAR_OPTIONS.map((c) => (<option key={c} value={c}>{c}</option>))}
+                    <option value={CUSTOM_OPTION_VALUE}>+ Kustom / Lainnya (Ketik Manual)</option>
                   </select>
+                  {isCustomCollar && (
+                    <input
+                      type="text"
+                      placeholder="Ketik model kerah..."
+                      value={customCollar}
+                      onChange={(e) => setCustomCollar(e.target.value)}
+                      className="w-full px-2 py-1 border border-blue-400 bg-blue-50/50 rounded focus:ring-1 focus:ring-blue-600 focus:outline-none text-[10.5px] font-semibold text-blue-900 mt-1"
+                      required
+                    />
+                  )}
                 </div>
               </div>
 
@@ -889,7 +1184,10 @@ export default function OrderDetailPage() {
                         type="radio"
                         name="ink_type"
                         checked={inkType === "ORI"}
-                        onChange={() => setInkType("ORI")}
+                        onChange={() => {
+                          setInkType("ORI")
+                          setInkProfile("952")
+                        }}
                         className="text-zinc-900"
                       />
                       <span className="font-semibold text-blue-800">Tinta Ori</span>
@@ -899,11 +1197,42 @@ export default function OrderDetailPage() {
                         type="radio"
                         name="ink_type"
                         checked={inkType === "CINA"}
-                        onChange={() => setInkType("CINA")}
+                        onChange={() => {
+                          setInkType("CINA")
+                          setInkProfile("2 PAS")
+                        }}
                         className="text-zinc-900"
                       />
                       <span>Tinta Cina</span>
                     </label>
+                  </div>
+
+                  {/* Profil Cetak Mesin */}
+                  <div className="mt-1.5 pt-1 border-t border-zinc-100">
+                    <span className="block text-[9.5px] text-zinc-500 font-bold mb-0.5 uppercase tracking-wider">
+                      Profil ({inkType === "ORI" ? "Ori" : "Cina"}):
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {INK_PROFILES[inkType].map((prof) => (
+                        <label key={prof} className="flex items-center gap-1 cursor-pointer text-[10.5px]">
+                          <input
+                            type="radio"
+                            name="ink_profile"
+                            value={prof}
+                            checked={inkProfile === prof}
+                            onChange={() => setInkProfile(prof)}
+                            className="text-zinc-900"
+                          />
+                          <span className={`px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold ${
+                            inkProfile === prof 
+                              ? "bg-blue-100 text-blue-900 border border-blue-300 shadow-2xs" 
+                              : "text-zinc-600 hover:text-zinc-900"
+                          }`}>
+                            {prof}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1220,29 +1549,48 @@ export default function OrderDetailPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-              <div className="space-y-1">
-                <span className="block text-xs font-semibold text-zinc-700">Screenshot 1</span>
+              {/* Screenshot 1 */}
+              <div
+                onDragOver={(e) => handleDragOver(e, "screenshot-1")}
+                onDragLeave={(e) => handleDragLeave(e, "screenshot-1")}
+                onDrop={(e) => handleDropScreenshot(e, 1)}
+                className="space-y-1"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="block text-xs font-semibold text-zinc-700">Screenshot 1</span>
+                  <span className="text-[10px] text-zinc-400 font-mono">Bisa Drag & Drop</span>
+                </div>
                 {rosterScreenshotUrl ? (
-                  <div className="border border-zinc-200 rounded p-2 bg-zinc-50 space-y-1.5">
+                  <div className={`border rounded p-2 transition-all space-y-1.5 ${
+                    dragTarget === "screenshot-1" ? "border-blue-500 bg-blue-50 ring-2 ring-blue-400" : "border-zinc-200 bg-zinc-50"
+                  }`}>
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-semibold text-emerald-700">✓ Gambar 1 Siap</span>
                       <button
                         type="button"
-                        onClick={() => setRosterScreenshotUrl(null)}
+                        onClick={() => handleDeleteScreenshot(1)}
                         className="text-zinc-400 hover:text-red-600 p-0.5"
+                        title="Hapus Screenshot"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                    <div className="h-32 border border-zinc-300 rounded bg-white flex items-center justify-center overflow-hidden">
+                    <div className="h-32 border border-zinc-300 rounded bg-white flex items-center justify-center overflow-hidden relative">
                       <img src={rosterScreenshotUrl} alt="Screenshot 1" className="h-full w-full object-contain" />
+                      {dragTarget === "screenshot-1" && (
+                        <div className="absolute inset-0 bg-blue-600/80 text-white font-bold text-xs flex items-center justify-center">
+                          Lepas File untuk Ganti Screenshot 1
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
-                  <label className="h-[120px] border-2 border-dashed border-zinc-300 rounded hover:border-zinc-500 transition-colors flex flex-col items-center justify-center p-3 cursor-pointer bg-zinc-50/30 text-center">
-                    <UploadCloud className="h-5 w-5 text-zinc-400 mb-0.5" />
+                  <label className={`h-[120px] border-2 border-dashed rounded transition-colors flex flex-col items-center justify-center p-3 cursor-pointer text-center ${
+                    dragTarget === "screenshot-1" ? "border-blue-500 bg-blue-50 text-blue-700 font-bold" : "border-zinc-300 hover:border-zinc-500 bg-zinc-50/30"
+                  }`}>
+                    <UploadCloud className={`h-5 w-5 mb-0.5 ${dragTarget === "screenshot-1" ? "text-blue-600 animate-bounce" : "text-zinc-400"}`} />
                     <span className="text-xs font-semibold text-zinc-700">
-                      {uploadingScreenshot ? "Mengunggah..." : "Unggah Screenshot 1"}
+                      {uploadingScreenshot ? "Mengunggah..." : dragTarget === "screenshot-1" ? "Lepas File di Sini!" : "Unggah Screenshot 1 (Klik / Drag)"}
                     </span>
                     <input
                       type="file"
@@ -1255,29 +1603,48 @@ export default function OrderDetailPage() {
                 )}
               </div>
 
-              <div className="space-y-1">
-                <span className="block text-xs font-semibold text-zinc-700">Screenshot 2 (Opsional)</span>
+              {/* Screenshot 2 */}
+              <div
+                onDragOver={(e) => handleDragOver(e, "screenshot-2")}
+                onDragLeave={(e) => handleDragLeave(e, "screenshot-2")}
+                onDrop={(e) => handleDropScreenshot(e, 2)}
+                className="space-y-1"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="block text-xs font-semibold text-zinc-700">Screenshot 2 (Opsional)</span>
+                  <span className="text-[10px] text-zinc-400 font-mono">Bisa Drag & Drop</span>
+                </div>
                 {rosterScreenshotUrl2 ? (
-                  <div className="border border-zinc-200 rounded p-2 bg-zinc-50 space-y-1.5">
+                  <div className={`border rounded p-2 transition-all space-y-1.5 ${
+                    dragTarget === "screenshot-2" ? "border-blue-500 bg-blue-50 ring-2 ring-blue-400" : "border-zinc-200 bg-zinc-50"
+                  }`}>
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-semibold text-emerald-700">✓ Gambar 2 Siap</span>
                       <button
                         type="button"
-                        onClick={() => setRosterScreenshotUrl2(null)}
+                        onClick={() => handleDeleteScreenshot(2)}
                         className="text-zinc-400 hover:text-red-600 p-0.5"
+                        title="Hapus Screenshot"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                    <div className="h-32 border border-zinc-300 rounded bg-white flex items-center justify-center overflow-hidden">
+                    <div className="h-32 border border-zinc-300 rounded bg-white flex items-center justify-center overflow-hidden relative">
                       <img src={rosterScreenshotUrl2} alt="Screenshot 2" className="h-full w-full object-contain" />
+                      {dragTarget === "screenshot-2" && (
+                        <div className="absolute inset-0 bg-blue-600/80 text-white font-bold text-xs flex items-center justify-center">
+                          Lepas File untuk Ganti Screenshot 2
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
-                  <label className="h-[120px] border-2 border-dashed border-zinc-300 rounded hover:border-zinc-500 transition-colors flex flex-col items-center justify-center p-3 cursor-pointer bg-zinc-50/30 text-center">
-                    <UploadCloud className="h-5 w-5 text-zinc-400 mb-0.5" />
+                  <label className={`h-[120px] border-2 border-dashed rounded transition-colors flex flex-col items-center justify-center p-3 cursor-pointer text-center ${
+                    dragTarget === "screenshot-2" ? "border-blue-500 bg-blue-50 text-blue-700 font-bold" : "border-zinc-300 hover:border-zinc-500 bg-zinc-50/30"
+                  }`}>
+                    <UploadCloud className={`h-5 w-5 mb-0.5 ${dragTarget === "screenshot-2" ? "text-blue-600 animate-bounce" : "text-zinc-400"}`} />
                     <span className="text-xs font-semibold text-zinc-700">
-                      {uploadingScreenshot2 ? "Mengunggah..." : "Unggah Screenshot 2"}
+                      {uploadingScreenshot2 ? "Mengunggah..." : dragTarget === "screenshot-2" ? "Lepas File di Sini!" : "Unggah Screenshot 2 (Klik / Drag)"}
                     </span>
                     <input
                       type="file"
@@ -1413,13 +1780,13 @@ export default function OrderDetailPage() {
 
           <div className="flex items-center gap-2 self-end sm:self-auto">
             <Link
-              href="/orders"
+              href={isDesignerRole ? "/orders/studio" : "/orders"}
               className="px-4 py-2 text-xs font-medium border border-zinc-300 rounded hover:bg-zinc-100 text-zinc-700 transition-colors"
             >
-              {isArchived ? "Kembali ke Daftar Pesanan" : "Kembali"}
+              {isArchived ? "Kembali ke Daftar Pesanan" : isDesignerRole ? "Kembali ke Studio Desain" : "Kembali"}
             </Link>
 
-            {!isLocked && (
+            {!isLocked && !isDesignerRole && (
               <>
                 <button
                   type="button"
@@ -1441,6 +1808,97 @@ export default function OrderDetailPage() {
           </div>
         </div>
 </form>
+      {/* MODAL PELACAKAN KONSUMEN & BERBAGI WHATSAPP */}
+      {showTrackingModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white border border-zinc-200 rounded-lg shadow-xl max-w-md w-full p-4 space-y-3.5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
+              <div className="flex items-center gap-1.5 text-emerald-800 font-bold text-xs">
+                <Share2 className="h-4 w-4 text-emerald-600" />
+                <span>Pelacakan Pesanan & Berbagi ke Konsumen</span>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setShowTrackingModal(false)} 
+                className="p-1 text-zinc-400 hover:text-zinc-700 rounded cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-600 leading-relaxed">
+              Bagikan link pelacakan langsung (*live tracking*) kepada pemesan <strong className="text-zinc-900">{customerName}</strong> ({orderTitle || orderNumber}) agar konsumen dapat melihat progres tanpa membebani CS.
+            </p>
+
+            {/* Input Link & Salin */}
+            <div className="space-y-1">
+              <label className="block text-[11px] font-bold text-zinc-700">Link Pelacakan Konsumen:</label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  readOnly
+                  value={trackingUrl}
+                  className="flex-1 px-2.5 py-1.5 border border-zinc-300 rounded text-xs font-mono bg-zinc-50 text-zinc-800 focus:outline-none select-all"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyTrackingLink}
+                  className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded text-xs font-semibold inline-flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  <span>{copiedLink ? "✓ Tersalin!" : "Salin Link"}</span>
+                </button>
+                <a
+                  href={trackingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1.5 border border-zinc-300 rounded hover:bg-zinc-100 text-zinc-700 shrink-0"
+                  title="Buka Tampilan Konsumen"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </div>
+            </div>
+
+            {/* Kirim WhatsApp 1-Klik */}
+            <div className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-3 space-y-2">
+              <span className="text-xs font-bold text-emerald-950 block">Kirim Pesan Otomatis via WhatsApp</span>
+              <div>
+                <label className="block text-[10.5px] font-medium text-emerald-900 mb-0.5">
+                  Nomor WhatsApp Konsumen (Opsional):
+                </label>
+                <input
+                  type="text"
+                  placeholder="08xxxxxxxxxx (Boleh dikosongkan untuk pilih kontak manual)"
+                  value={customerPhoneInput}
+                  onChange={(e) => setCustomerPhoneInput(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-emerald-300 rounded text-xs font-mono bg-white text-zinc-900 focus:ring-1 focus:ring-emerald-600 focus:outline-none"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleSendWA}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold py-2 transition-colors shadow-2xs inline-flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                <span>Kirim Link via WhatsApp</span>
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-1 border-t border-zinc-100">
+              <button
+                type="button"
+                onClick={() => setShowTrackingModal(false)}
+                className="px-3.5 py-1.5 border border-zinc-200 rounded text-xs font-medium text-zinc-700 hover:bg-zinc-50 cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL DIALOG KONFIRMASI PEMBATALAN PESANAN */}
       {showCancelModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">

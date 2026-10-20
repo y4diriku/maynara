@@ -49,10 +49,27 @@ export default function RootLayout({
           .single()
 
         const userRole = (profile?.role || "ADMIN").toUpperCase()
+        const isDesigner = userRole.includes("DESIGN") || userRole === "OPERATOR_DESIGN" || userRole === "DESIGNER"
         const isOperatorRole =
-          userRole.includes("OPERATOR") ||
+          (userRole.includes("OPERATOR") && !isDesigner) ||
           userRole === "SEWING_SUPERVISOR" ||
           userRole === "QC"
+
+        // Jika operator umum dilarang selain ke kiosk.
+        // Jika desainer: izinkan akses studio (/orders/studio) dan detail/SPK order (/orders/[id]), 
+        // tetapi larang akses ke list order CS (/orders), buat order baru (/orders/new), dan inbox (/orders/inbox).
+        const isDesignerDetailOrSpk =
+          pathname.startsWith("/orders/") &&
+          !pathname.startsWith("/orders/new") &&
+          !pathname.startsWith("/orders/inbox") &&
+          pathname !== "/orders"
+
+        const isDesignerAllowed = pathname.startsWith("/orders/studio") || isDesignerDetailOrSpk
+
+        if (isDesigner && !isDesignerAllowed) {
+          router.replace("/orders/studio")
+          return
+        }
 
         if (isOperatorRole && pathname !== "/kiosk") {
           router.replace("/kiosk")

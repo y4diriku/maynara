@@ -12,7 +12,8 @@ import {
   Calendar, 
   ExternalLink,
   Printer,
-  Sparkles
+  Sparkles,
+  FileText
 } from "lucide-react"
 
 interface OrderInboxItem {
@@ -29,6 +30,7 @@ interface OrderInboxItem {
   catatan_desain?: string | null
   assigned_designer_id?: string | null
   assigned_designer_name?: string | null
+  size_breakdown?: any
 }
 
 interface DesignerProfile {
@@ -56,6 +58,11 @@ export default function OrderInboxPage() {
   // State pilihan desainer per order: { [orderId]: designerId }
   const [selectedDesigners, setSelectedDesigners] = useState<Record<string, string>>({})
   const [processingId, setProcessingId] = useState<string | null>(null)
+  const [currentUser, setCurrentUser] = useState<{ name: string; role: string; id: string | null }>({
+    name: "Admin",
+    role: "ADMIN",
+    id: null
+  })
 
   const loadInboxData = async (showSpinner = false) => {
     if (showSpinner) setIsRefreshing(true)
@@ -71,6 +78,30 @@ export default function OrderInboxPage() {
 
       if (!oErr && oData) {
         setOrders(oData)
+        // Pre-populasi desainer jika sebelumnya sudah pernah dipilih
+        const preSelected: Record<string, string> = {}
+        oData.forEach((item: any) => {
+          if (item.assigned_designer_id) {
+            preSelected[item.id] = item.assigned_designer_id
+          }
+        })
+        setSelectedDesigners((prev) => ({ ...preSelected, ...prev }))
+      }
+
+      // Ambil data admin/user yang sedang login
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        const { data: myProfile } = await supabase
+          .from("profiles")
+          .select("full_name, role")
+          .eq("id", session.user.id)
+          .single()
+
+        setCurrentUser({
+          name: myProfile?.full_name || session.user.email?.split("@")[0] || "Admin CS",
+          role: (myProfile?.role || "ADMIN").toUpperCase(),
+          id: session.user.id
+        })
       }
 
       // 2. Ambil daftar staf yang bisa jadi desainer (ADMIN, OWNER, DESIGNER, OPERATOR_DESIGN)
@@ -149,11 +180,14 @@ export default function OrderInboxPage() {
 
       if (updateErr) throw updateErr
 
-      // Catat log audit trail
+      // Catat log audit trail dengan identitas PIC lengkap
       await supabase.from("production_logs").insert({
         order_id: order.id,
         stage: "DESIGN_QUEUE",
-        notes: `Pesanan divalidasi dari Inbox dan ditugaskan ke Desainer: ${designerName}. Masuk Pos 01 (Desain).`
+        notes: `Pesanan divalidasi dari Inbox dan ditugaskan ke Desainer: ${designerName}. Masuk Pos 01 (Desain).`,
+        operator_name: currentUser.name,
+        operator_role: currentUser.role,
+        operator_id: currentUser.id
       })
 
       // Hapus dari state lokal inbox seketika
@@ -253,8 +287,20 @@ export default function OrderInboxPage() {
 
                       {/* Spesifikasi & Qty */}
                       <td className="py-3 px-3">
-                        <span className="block text-zinc-700">{o.fabric_type}</span>
-                        <strong className="font-mono text-zinc-900 text-[11px]">{o.total_qty} pcs</strong>
+                        <span className="block text-zinc-800 font-semibold text-[11px]">{o.fabric_type}</span>
+                        <strong className="font-mono text-zinc-950 text-xs block">{o.total_qty} pcs</strong>
+                        {Array.isArray(o.size_breakdown?.active_models) && o.size_breakdown.active_models.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {o.size_breakdown.active_models.slice(0, 3).map((m: string) => (
+                              <span key={m} className="px-1.5 py-0.2 bg-zinc-100 text-zinc-700 text-[9px] font-mono rounded border border-zinc-200">
+                                {m}
+                              </span>
+                            ))}
+                            {o.size_breakdown.active_models.length > 3 && (
+                              <span className="text-[9px] text-zinc-400 font-mono">+{o.size_breakdown.active_models.length - 3}</span>
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       {/* Aset & Catatan */}
@@ -301,7 +347,7 @@ export default function OrderInboxPage() {
                             className="p-1.5 border border-zinc-200 rounded hover:bg-zinc-100 text-zinc-900 transition-colors"
                             title="Lihat Detail Order"
                           >
-                            <Printer className="h-3.5 w-3.5" />
+                            <FileText className="h-3.5 w-3.5 text-zinc-700" />
                           </Link>
                           <button
                             type="button"

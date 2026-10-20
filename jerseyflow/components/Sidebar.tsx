@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { 
   Inbox,
+  Palette,
   KanbanSquare, 
   ClipboardList, 
   QrCode, 
@@ -28,11 +29,38 @@ export default function Sidebar() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [inboxCount, setInboxCount] = useState(0)
+  const [designTaskCount, setDesignTaskCount] = useState(0)
 
     useEffect(() => {
     const savedState = localStorage.getItem("sidebar_collapsed")
     if (savedState !== null) {
       setIsCollapsed(savedState === "true")
+    }
+
+    let currentUserId = ""
+    let currentUserRole = ""
+
+    async function fetchDesignTaskCount(uid: string, uRole: string) {
+      if (!uid) return
+      const r = uRole.toUpperCase()
+      const isDes = r.includes("DESIGN") || r === "OPERATOR_DESIGN" || r === "DESIGNER"
+      if (!isDes) return
+
+      const { count } = await supabase
+        .from("orders")
+        .select("*", { count: "exact", head: true })
+        .eq("current_status", "DESIGN_QUEUE")
+        .eq("assigned_designer_id", uid)
+
+      if (count !== null) setDesignTaskCount(count)
+    }
+
+    async function fetchInboxCount() {
+      const { count } = await supabase
+        .from("orders")
+        .select("*", { count: "exact", head: true })
+        .eq("current_status", "ORDER_INBOX")
+      if (count !== null) setInboxCount(count)
     }
 
     async function loadData() {
@@ -45,10 +73,16 @@ export default function Sidebar() {
           .single()
 
         if (data) {
+          const uRole = (data.role || "ADMIN").toUpperCase()
+          currentUserId = session.user.id
+          currentUserRole = uRole
+
           setProfile({
             full_name: data.full_name || session.user.email?.split("@")[0] || "Staf",
-            role: (data.role || "ADMIN").toUpperCase()
+            role: uRole
           })
+
+          fetchDesignTaskCount(session.user.id, uRole)
         }
       }
 
@@ -63,23 +97,18 @@ export default function Sidebar() {
     }
 
     loadData()
-
-    async function fetchInboxCount() {
-      const { count } = await supabase
-        .from("orders")
-        .select("*", { count: "exact", head: true })
-        .eq("current_status", "ORDER_INBOX")
-      if (count !== null) setInboxCount(count)
-    }
     fetchInboxCount()
 
-    const inboxChan = supabase
-      .channel("sidebar_inbox_count")
-      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => fetchInboxCount())
+    const ordersChan = supabase
+      .channel("sidebar_realtime_counts")
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
+        fetchInboxCount()
+        if (currentUserId) fetchDesignTaskCount(currentUserId, currentUserRole)
+      })
       .subscribe()
 
     return () => {
-      supabase.removeChannel(inboxChan)
+      supabase.removeChannel(ordersChan)
     }
   }, [])
 
@@ -101,18 +130,30 @@ export default function Sidebar() {
 
   const role = (profile?.role || "ADMIN").toUpperCase()
 
+  const isDesigner = role === "OPERATOR_DESIGN" || role === "DESIGNER"
+
   const navigation = [
+    ...(isDesigner ? [
+      { 
+        name: "Tugas Desain Saya", 
+        href: "/orders/studio", 
+        icon: Palette,
+        badge: designTaskCount > 0 ? designTaskCount : null
+      },
+    ] : []),
     ...(role === "OWNER" || role === "ADMIN" ? [
       { 
-      name: "Order Masuk", 
-      href: "/orders/inbox", 
-      icon: Inbox,
-      badge: inboxCount > 0 ? inboxCount : null
-    },
+        name: "Order Masuk", 
+        href: "/orders/inbox", 
+        icon: Inbox,
+        badge: inboxCount > 0 ? inboxCount : null
+      },
       { name: "Antrean Produksi", href: "/", icon: KanbanSquare },
       { name: "Daftar Pesanan", href: "/orders", icon: ClipboardList },
     ] : []),
-    { name: "Scan SPK Produksi", href: "/kiosk", icon: QrCode },
+    ...(!isDesigner ? [
+      { name: "Scan SPK Produksi", href: "/kiosk", icon: QrCode },
+    ] : []),
     ...(role === "OWNER" || role === "ADMIN" ? [
       { name: "Partner Makloon", href: "/makloon", icon: Users2 },
     ] : []),
@@ -183,7 +224,10 @@ export default function Sidebar() {
                 <div className="flex items-center justify-between flex-1 min-w-0">
                   <span className="truncate">{item.name}</span>
                   {(item as any).badge && (
-                    <span className="ml-auto px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold bg-amber-500 text-white">
+                    <span className={cn(
+                      "ml-auto px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold text-white",
+                      item.href === "/orders/studio" ? "bg-blue-600" : "bg-amber-500"
+                    )}>
                       {(item as any).badge}
                     </span>
                   )}
@@ -192,7 +236,10 @@ export default function Sidebar() {
 
               {/* Badge kecil saat sidebar ditutup (collapsed) */}
               {isCollapsed && (item as any).badge && (
-                <span className="absolute top-1 right-1 h-4 w-4 rounded-full bg-amber-500 text-white text-[8px] font-mono font-bold flex items-center justify-center shadow-xs">
+                <span className={cn(
+                  "absolute top-1 right-1 h-4 w-4 rounded-full text-white text-[8px] font-mono font-bold flex items-center justify-center shadow-xs",
+                  item.href === "/orders/studio" ? "bg-blue-600" : "bg-amber-500"
+                )}>
                   {(item as any).badge}
                 </span>
               )}

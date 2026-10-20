@@ -4,6 +4,8 @@ import { useEffect, useState, useMemo } from "react"
 import { useParams } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { Printer, ShieldCheck, UserCheck } from "lucide-react"
+import { QRCodeSVG } from "qrcode.react"
+import { ADULT_SIZES, KID_SIZES } from "@/lib/constants"
 
 interface OrderDetail {
   id: string
@@ -24,6 +26,7 @@ interface OrderDetail {
   total_price?: number
   down_payment?: number
   is_paid_off?: boolean
+  pricing_config?: any
   size_breakdown?: any
   roster_wa_text?: string | null
   roster_screenshot_url?: string | null
@@ -35,9 +38,6 @@ interface OrderDetail {
   created_at: string
   created_by_name?: string | null
 }
-
-const ADULT_SIZES = ["S", "M", "L", "XL", "2XL", "3XL"]
-const KID_SIZES = ["S Anak", "M Anak", "L Anak", "XL Anak"]
 
 function formatDateID(dateStr?: string | null): string {
   if (!dateStr) return "-"
@@ -111,30 +111,73 @@ export default function FormOrderPrintPage() {
     const adult = bd.adult || {}
     const kid = bd.kid || {}
 
-    let adultPendek = 0, adultPanjang = 0, adultCelana = 0
-    ADULT_SIZES.forEach((sz) => {
-      adultPendek += Number(adult[sz]?.pendek || 0)
-      adultPanjang += Number(adult[sz]?.panjang || 0)
-      adultCelana += Number(adult[sz]?.celana || 0)
-    })
-    const adultBaju = adultPendek + adultPanjang
+    // Ekstrak active_models dengan backward compatibility
+    let activeModels: string[] = []
+    if (Array.isArray(bd.active_models) && bd.active_models.length > 0) {
+      activeModels = bd.active_models
+    } else {
+      activeModels = ["Lengan Pendek", "Lengan Panjang"]
+      const hasCelana =
+        Object.values(adult).some((r: any) => Number(r?.celana || 0) > 0) ||
+        Object.values(kid).some((r: any) => Number(r?.celana || 0) > 0)
+      if (hasCelana || order.package_type === "STELAN") {
+        activeModels.push("Celana Pendek")
+      }
+    }
 
-    let kidPendek = 0, kidPanjang = 0, kidCelana = 0
-    KID_SIZES.forEach((sz) => {
-      kidPendek += Number(kid[sz]?.pendek || 0)
-      kidPanjang += Number(kid[sz]?.panjang || 0)
-      kidCelana += Number(kid[sz]?.celana || 0)
+    const getCount = (row: any, model: string): number => {
+      if (!row) return 0
+      if (model in row) return Number(row[model] || 0)
+      if (model === "Lengan Pendek" && "pendek" in row) return Number(row.pendek || 0)
+      if (model === "Lengan Panjang" && "panjang" in row) return Number(row.panjang || 0)
+      if (model === "Celana Pendek" && "celana" in row) return Number(row.celana || 0)
+      return 0
+    }
+
+    const modelTotals: Record<string, number> = {}
+    const adultModelTotals: Record<string, number> = {}
+    const kidModelTotals: Record<string, number> = {}
+    activeModels.forEach((m) => {
+      modelTotals[m] = 0
+      adultModelTotals[m] = 0
+      kidModelTotals[m] = 0
     })
-    const kidBaju = kidPendek + kidPanjang
+
+    let adultGrandTotal = 0
+    ADULT_SIZES.forEach((sz) => {
+      const row = adult[sz] || {}
+      activeModels.forEach((m) => {
+        const count = getCount(row, m)
+        adultModelTotals[m] += count
+        modelTotals[m] += count
+        adultGrandTotal += count
+      })
+    })
+
+    let kidGrandTotal = 0
+    KID_SIZES.forEach((sz) => {
+      const row = kid[sz] || {}
+      activeModels.forEach((m) => {
+        const count = getCount(row, m)
+        kidModelTotals[m] += count
+        modelTotals[m] += count
+        kidGrandTotal += count
+      })
+    })
+
+    const grandTotalPcs = adultGrandTotal + kidGrandTotal
 
     return {
-      adult, kid,
-      adultPendek, adultPanjang, adultCelana, adultBaju,
-      kidPendek, kidPanjang, kidCelana, kidBaju,
-      hasAdult: adultBaju > 0 || adultCelana > 0,
-      hasKid: kidBaju > 0 || kidCelana > 0,
-      grandBaju: adultBaju + kidBaju,
-      grandCelana: adultCelana + kidCelana
+      activeModels,
+      adult,
+      kid,
+      getCount,
+      modelTotals,
+      adultModelTotals,
+      kidModelTotals,
+      adultGrandTotal,
+      kidGrandTotal,
+      grandTotalPcs,
     }
   }, [order])
 
@@ -145,6 +188,10 @@ export default function FormOrderPrintPage() {
   if (!order) {
     return <div className="p-8 text-center text-xs font-mono text-red-600">Pesanan tidak ditemukan.</div>
   }
+
+  const trackingUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/track/${order.order_number}`
+    : `/track/${order.order_number}`
 
   const isStelan = order.package_type === "STELAN"
   const isPrintPress = order.order_type === "PRINT_PRESS"
@@ -166,7 +213,7 @@ export default function FormOrderPrintPage() {
         @media print {
           @page {
             size: A4 portrait;
-            margin: 0mm !important; /* HILANGKAN MARGIN BROWSER TOTAL */
+            margin: 0mm !important;
           }
           html, body {
             background: white !important;
@@ -176,7 +223,6 @@ export default function FormOrderPrintPage() {
             print-color-adjust: exact;
             -webkit-print-color-adjust: exact;
           }
-          /* MATIKAN OVERFLOW TRAP NEXT.JS SECARA ABSOLUT */
           main, main > div, #__next, div[data-nextjs-scroll-focus-boundary], body > div {
             overflow: visible !important;
             height: auto !important;
@@ -188,12 +234,10 @@ export default function FormOrderPrintPage() {
           aside, header, nav, .print-hidden-bar {
             display: none !important;
           }
-          
-          /* ENGINE HALAMAN BARU (MENGUNCI 100% 1 KERTAS A4) */
           .print-sheet {
             width: 210mm !important;
-            height: 296mm !important; /* Tinggi A4 Presisi */
-            padding: 10mm 12mm !important; /* Margin Buatan Internal */
+            height: 296mm !important;
+            padding: 10mm 12mm !important;
             box-sizing: border-box !important;
             display: flex !important;
             flex-direction: column !important;
@@ -205,15 +249,13 @@ export default function FormOrderPrintPage() {
             box-shadow: none !important;
             margin: 0 auto !important;
           }
-        
-          /* KEMBALIKAN GRID 2 KOLOM UNTUK SCREENSHOT SAAT CETAK */
           .spk-ss-grid-2 {
             display: grid !important;
             grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
             gap: 0.5rem !important;
             align-items: start !important;
           }
-}
+        }
       `}</style>
 
       {/* Latar Belakang Abu-Abu untuk Tampilan Layar (Bukan Print) */}
@@ -291,10 +333,16 @@ export default function FormOrderPrintPage() {
                 <h3 className="text-xs font-black text-zinc-900 tracking-wide mt-0.5">MANAYRA PRODUCTION WORKSHOP</h3>
               </div>
 
-              <div className="text-right text-xs">
-                <span className="font-mono font-black text-sm block tracking-tight text-zinc-950">{order.order_number}</span>
-                <span className="text-[10px] text-zinc-600 font-mono block">Tgl Order: {formatDateID(order.created_at)}</span>
-                <span className="text-[10px] text-zinc-600 font-mono block">Est. Selesai: <strong className="text-zinc-900">{formatDateID(order.deadline_date)}</strong></span>
+              <div className="flex items-center gap-2.5 border border-black p-1.5 rounded bg-white shrink-0">
+                <div className="text-right text-xs">
+                  <span className="font-mono font-black text-sm block tracking-tight text-zinc-950">{order.order_number}</span>
+                  <span className="text-[9.5px] text-zinc-600 font-mono block">Tgl Order: {formatDateID(order.created_at)}</span>
+                  <span className="text-[9.5px] text-zinc-600 font-mono block">Est. Selesai: <strong className="text-zinc-900">{formatDateID(order.deadline_date)}</strong></span>
+                </div>
+                <div className="border-l border-black/30 pl-2 flex flex-col items-center justify-center">
+                  <QRCodeSVG value={trackingUrl} size={50} level="M" />
+                  <span className="text-[6.5px] font-bold uppercase font-mono tracking-tighter text-zinc-800 mt-0.5">SCAN TRACKING</span>
+                </div>
               </div>
             </div>
 
@@ -341,7 +389,7 @@ export default function FormOrderPrintPage() {
               </div>
               <div>
                 <span className="text-[9px] text-zinc-600 block uppercase font-bold">Total Jumlah Order</span>
-                <strong className="text-base font-mono font-black">{order.total_qty} PCS / STEL</strong>
+                <strong className="text-base font-mono font-black">{order.total_qty} PCS</strong>
               </div>
             </div>
 
@@ -379,7 +427,7 @@ export default function FormOrderPrintPage() {
               )}
             </div>
 
-            {/* 5. Tabel Matriks Ukuran (KIRI: ANAK, KANAN: DEWASA) */}
+            {/* 5. Tabel Matriks Ukuran Multi-Model (KIRI: SIZE ANAK, KANAN: SIZE DEWASA) */}
             <div className="pt-0.5 space-y-1">
               <span className="text-[9px] font-black uppercase tracking-wider block text-zinc-800">
                 RINCIAN DISTRIBUSI UKURAN
@@ -388,123 +436,122 @@ export default function FormOrderPrintPage() {
               {matrixCalculation ? (
                 <div className="space-y-1">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-stretch">
-                    {/* KATEGORI ANAK (SEBELAH KIRI) */}
+                    {/* SIZE ANAK (SEBELAH KIRI) */}
                     <div className="border border-black rounded overflow-hidden bg-white">
-                      <div className="bg-zinc-200 px-2 py-0.5 text-[9px] font-black uppercase border-b border-black flex justify-between">
-                        <span>Kategori Anak</span>
-                        <span className="font-mono">{matrixCalculation.kidBaju} Baju {isStelan && `• ${matrixCalculation.kidCelana} Celana`}</span>
+                      <div className="bg-zinc-200 px-2 py-0.5 text-[9px] font-black uppercase border-b border-black flex justify-between items-center">
+                        <span>SIZE ANAK</span>
+                        <span className="font-mono text-[9px]">Total: {matrixCalculation.kidGrandTotal} pcs</span>
                       </div>
                       <table className="w-full text-center text-xs border-collapse table-fixed">
-                        <colgroup>
-                          <col className="w-16" />
-                          <col />
-                          <col />
-                          {isStelan && <col className="w-14" />}
-                          <col className="w-20" />
-                        </colgroup>
                         <thead>
-                          <tr className="bg-zinc-100 border-b border-black text-[9px] font-bold uppercase">
-                            <th className="py-1 px-1 border-r border-black">Ukuran</th>
-                            <th className="py-1 px-1 border-r border-black">Pendek</th>
-                            <th className="py-1 px-1 border-r border-black">Panjang</th>
-                            {isStelan && <th className="py-1 px-1 border-r border-black bg-zinc-200">Celana</th>}
-                            <th className="py-1 px-1">Subtotal</th>
+                          <tr className="bg-zinc-100 border-b border-black text-[8.5px] font-bold uppercase leading-tight">
+                            <th className="py-1 px-1 border-r border-black w-16 align-middle">Ukuran</th>
+                            {matrixCalculation.activeModels.map((m) => (
+                              <th key={m} className="py-1 px-1 border-r border-black font-black break-words align-middle">
+                                {m}
+                              </th>
+                            ))}
+                            <th className="py-1 px-1 w-10 align-middle">Total</th>
                           </tr>
                         </thead>
                         <tbody>
                           {KID_SIZES.map((sz) => {
                             const r = matrixCalculation.kid[sz] || {}
-                            const p = Number(r.pendek || 0)
-                            const pj = Number(r.panjang || 0)
-                            const c = Number(r.celana || 0)
-                            const total = p + pj
+                            const rowSubtotal = matrixCalculation.activeModels.reduce(
+                              (sum, m) => sum + matrixCalculation.getCount(r, m), 0
+                            )
 
                             return (
                               <tr key={sz} className="border-b border-black/40 font-mono">
-                                <td className="py-0.5 px-1 border-r border-black font-bold font-sans bg-zinc-50 text-[11px]">{sz}</td>
-                                <td className="py-0.5 px-1 border-r border-black text-[13px] font-black text-black">{p || "-"}</td>
-                                <td className="py-0.5 px-1 border-r border-black text-[13px] font-black text-black">{pj || "-"}</td>
-                                {isStelan && <td className="py-0.5 px-1 border-r border-black bg-zinc-100 text-[13px] font-black text-black">{c || "-"}</td>}
-                                <td className="py-0.5 px-1 font-black text-[13px] text-black">{total || "-"}</td>
+                                <td className="py-0.5 px-1 border-r border-black font-bold font-sans bg-zinc-50 text-[10.5px] whitespace-nowrap">{sz}</td>
+                                {matrixCalculation.activeModels.map((m) => {
+                                  const val = matrixCalculation.getCount(r, m)
+                                  return (
+                                    <td key={m} className="py-0.5 px-1 border-r border-black text-[12px] font-black text-black">
+                                      {val || "-"}
+                                    </td>
+                                  )
+                                })}
+                                <td className="py-0.5 px-1 font-black text-[12px] text-black">{rowSubtotal || "-"}</td>
                               </tr>
                             )
                           })}
-                          <tr className="border-b border-black/40 font-mono">
-                            <td className="py-0.5 px-1 border-r border-black bg-zinc-50 text-[11px] text-transparent">-</td>
-                            <td className="py-0.5 px-1 border-r border-black text-transparent">-</td>
-                            <td className="py-0.5 px-1 border-r border-black text-transparent">-</td>
-                            {isStelan && <td className="py-0.5 px-1 border-r border-black bg-zinc-100 text-transparent">-</td>}
-                            <td className="py-0.5 px-1 text-transparent">-</td>
-                          </tr>
-                          <tr className="border-b border-black/40 font-mono">
-                            <td className="py-0.5 px-1 border-r border-black bg-zinc-50 text-[11px] text-transparent">-</td>
-                            <td className="py-0.5 px-1 border-r border-black text-transparent">-</td>
-                            <td className="py-0.5 px-1 border-r border-black text-transparent">-</td>
-                            {isStelan && <td className="py-0.5 px-1 border-r border-black bg-zinc-100 text-transparent">-</td>}
-                            <td className="py-0.5 px-1 text-transparent">-</td>
-                          </tr>
+
+                          {/* Baris Spacer Sejajar Horisontal dengan Size Dewasa */}
+                          {Array.from({ length: Math.max(0, ADULT_SIZES.length - KID_SIZES.length) }).map((_, idx) => (
+                            <tr key={`spacer-${idx}`} className="border-b border-black/40 font-mono">
+                              <td className="py-0.5 px-1 border-r border-black bg-zinc-50 text-[10.5px] text-transparent select-none">-</td>
+                              {matrixCalculation.activeModels.map((m) => (
+                                <td key={m} className="py-0.5 px-1 border-r border-black text-transparent select-none">-</td>
+                              ))}
+                              <td className="py-0.5 px-1 text-transparent select-none">-</td>
+                            </tr>
+                          ))}
                         </tbody>
                         <tfoot>
-                          <tr className="bg-zinc-100 border-t border-black font-mono text-xs">
-                            <td className="py-1 px-1 border-r border-black font-sans font-bold text-zinc-800 text-[10px]">SUBTOTAL</td>
-                            <td className="py-1 px-1 border-r border-black font-bold text-black text-[12px]">{matrixCalculation.kidPendek}</td>
-                            <td className="py-1 px-1 border-r border-black font-bold text-black text-[12px]">{matrixCalculation.kidPanjang}</td>
-                            {isStelan && <td className="py-1 px-1 border-r border-black font-bold text-black text-[12px] bg-zinc-200">{matrixCalculation.kidCelana}</td>}
-                            <td className="py-1 px-1 font-bold text-zinc-900 text-[11px]">{matrixCalculation.kidBaju} Baju</td>
+                          <tr className="bg-zinc-100 border-t-2 border-black font-mono text-xs">
+                            <td className="py-1 px-1 border-r border-black font-sans font-bold text-zinc-900 text-[9px] w-16">SUBTOTAL</td>
+                            {matrixCalculation.activeModels.map((m) => (
+                              <td key={m} className="py-1 px-1 border-r border-black font-black text-black text-[11.5px]">
+                                {matrixCalculation.kidModelTotals[m]}
+                              </td>
+                            ))}
+                            <td className="py-1 px-1 font-black text-black text-[11.5px] w-10">{matrixCalculation.kidGrandTotal}</td>
                           </tr>
                         </tfoot>
                       </table>
                     </div>
 
-                    {/* KATEGORI DEWASA (SEBELAH KANAN) */}
+                    {/* SIZE DEWASA (SEBELAH KANAN) */}
                     <div className="border border-black rounded overflow-hidden bg-white">
-                      <div className="bg-zinc-200 px-2 py-0.5 text-[9px] font-black uppercase border-b border-black flex justify-between">
-                        <span>Kategori Dewasa</span>
-                        <span className="font-mono">{matrixCalculation.adultBaju} Baju {isStelan && `• ${matrixCalculation.adultCelana} Celana`}</span>
+                      <div className="bg-zinc-200 px-2 py-0.5 text-[9px] font-black uppercase border-b border-black flex justify-between items-center">
+                        <span>SIZE DEWASA</span>
+                        <span className="font-mono text-[9px]">Total: {matrixCalculation.adultGrandTotal} pcs</span>
                       </div>
                       <table className="w-full text-center text-xs border-collapse table-fixed">
-                        <colgroup>
-                          <col className="w-16" />
-                          <col />
-                          <col />
-                          {isStelan && <col className="w-14" />}
-                          <col className="w-20" />
-                        </colgroup>
                         <thead>
-                          <tr className="bg-zinc-100 border-b border-black text-[9px] font-bold uppercase">
-                            <th className="py-1 px-1 border-r border-black">Ukuran</th>
-                            <th className="py-1 px-1 border-r border-black">Pendek</th>
-                            <th className="py-1 px-1 border-r border-black">Panjang</th>
-                            {isStelan && <th className="py-1 px-1 border-r border-black bg-zinc-200">Celana</th>}
-                            <th className="py-1 px-1">Subtotal</th>
+                          <tr className="bg-zinc-100 border-b border-black text-[8.5px] font-bold uppercase leading-tight">
+                            <th className="py-1 px-1 border-r border-black w-16 align-middle">Ukuran</th>
+                            {matrixCalculation.activeModels.map((m) => (
+                              <th key={m} className="py-1 px-1 border-r border-black font-black break-words align-middle">
+                                {m}
+                              </th>
+                            ))}
+                            <th className="py-1 px-1 w-10 align-middle">Total</th>
                           </tr>
                         </thead>
                         <tbody>
                           {ADULT_SIZES.map((sz) => {
                             const r = matrixCalculation.adult[sz] || {}
-                            const p = Number(r.pendek || 0)
-                            const pj = Number(r.panjang || 0)
-                            const c = Number(r.celana || 0)
-                            const total = p + pj
+                            const rowSubtotal = matrixCalculation.activeModels.reduce(
+                              (sum, m) => sum + matrixCalculation.getCount(r, m), 0
+                            )
 
                             return (
                               <tr key={sz} className="border-b border-black/40 font-mono">
-                                <td className="py-0.5 px-1 border-r border-black font-bold font-sans bg-zinc-50 text-xs">{sz}</td>
-                                <td className="py-0.5 px-1 border-r border-black text-[13px] font-black text-black">{p || "-"}</td>
-                                <td className="py-0.5 px-1 border-r border-black text-[13px] font-black text-black">{pj || "-"}</td>
-                                {isStelan && <td className="py-0.5 px-1 border-r border-black bg-zinc-100 text-[13px] font-black text-black">{c || "-"}</td>}
-                                <td className="py-0.5 px-1 font-black text-[13px] text-black">{total || "-"}</td>
+                                <td className="py-0.5 px-1 border-r border-black font-bold font-sans bg-zinc-50 text-[11px] whitespace-nowrap">{sz}</td>
+                                {matrixCalculation.activeModels.map((m) => {
+                                  const val = matrixCalculation.getCount(r, m)
+                                  return (
+                                    <td key={m} className="py-0.5 px-1 border-r border-black text-[12px] font-black text-black">
+                                      {val || "-"}
+                                    </td>
+                                  )
+                                })}
+                                <td className="py-0.5 px-1 font-black text-[12px] text-black">{rowSubtotal || "-"}</td>
                               </tr>
                             )
                           })}
                         </tbody>
                         <tfoot>
-                          <tr className="bg-zinc-100 border-t border-black font-mono text-xs">
-                            <td className="py-1 px-1 border-r border-black font-sans font-bold text-zinc-800 text-[10px]">SUBTOTAL</td>
-                            <td className="py-1 px-1 border-r border-black font-bold text-black text-[12px]">{matrixCalculation.adultPendek}</td>
-                            <td className="py-1 px-1 border-r border-black font-bold text-black text-[12px]">{matrixCalculation.adultPanjang}</td>
-                            {isStelan && <td className="py-1 px-1 border-r border-black font-bold text-black text-[12px] bg-zinc-200">{matrixCalculation.adultCelana}</td>}
-                            <td className="py-1 px-1 font-bold text-zinc-900 text-[11px]">{matrixCalculation.adultBaju} Baju</td>
+                          <tr className="bg-zinc-100 border-t-2 border-black font-mono text-xs">
+                            <td className="py-1 px-1 border-r border-black font-sans font-bold text-zinc-900 text-[9px] w-16">SUBTOTAL</td>
+                            {matrixCalculation.activeModels.map((m) => (
+                              <td key={m} className="py-1 px-1 border-r border-black font-black text-black text-[11.5px]">
+                                {matrixCalculation.adultModelTotals[m]}
+                              </td>
+                            ))}
+                            <td className="py-1 px-1 font-black text-black text-[11.5px] w-10">{matrixCalculation.adultGrandTotal}</td>
                           </tr>
                         </tfoot>
                       </table>
@@ -512,21 +559,16 @@ export default function FormOrderPrintPage() {
                   </div>
 
                   {/* Grand Total Bersih */}
-                  <div className="pt-1.5 flex items-center justify-between text-xs font-mono font-bold">
+                  <div className="pt-1.5 flex flex-wrap items-center justify-between text-xs font-mono font-bold gap-2">
                     <span className="font-sans uppercase text-[10px] tracking-wider text-black">TOTAL PESANAN KESELURUHAN:</span>
-                    <div className="flex items-center gap-3">
-                      <span>Anak: <strong className="text-black font-mono">{matrixCalculation.kidBaju} pcs</strong></span>
-                      <span className="text-zinc-400">&bull;</span>
-                      <span>Dewasa: <strong className="text-black font-mono">{matrixCalculation.adultBaju} pcs</strong></span>
-                      {isStelan && (
-                        <>
-                          <span className="text-zinc-400">&bull;</span>
-                          <span>Celana: <strong className="text-black font-mono">{matrixCalculation.grandCelana} pcs</strong></span>
-                        </>
-                      )}
-                      <span className="text-zinc-400">&bull;</span>
-                      <span className="text-black font-black text-sm">
-                        TOTAL: {matrixCalculation.grandBaju} PCS / STEL
+                    <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                      {matrixCalculation.activeModels.map((m) => (
+                        <span key={m} className="border border-black px-1.5 py-0.2 bg-zinc-50">
+                          {m}: <strong className="text-black font-mono">{matrixCalculation.modelTotals[m]}</strong>
+                        </span>
+                      ))}
+                      <span className="text-black font-black text-xs pl-1">
+                        TOTAL: {matrixCalculation.grandTotalPcs} PCS
                       </span>
                     </div>
                   </div>
@@ -538,7 +580,14 @@ export default function FormOrderPrintPage() {
             {showFinancials && (
               <div className="border border-black rounded p-2 bg-zinc-50 space-y-1 text-xs mt-2">
                 <div className="flex justify-between items-center border-b border-zinc-300 pb-0.5">
-                  <span className="font-bold uppercase text-[9px]">RINCIAN BIAYA & PEMBAYARAN</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold uppercase text-[9px]">RINCIAN BIAYA & PEMBAYARAN</span>
+                    {order.pricing_config?.isManualPrice && (
+                      <span className="px-1.5 py-0.2 rounded text-[8.5px] font-mono font-bold bg-purple-100 text-purple-900 border border-purple-300">
+                        PAKET BORONGAN
+                      </span>
+                    )}
+                  </div>
                   <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border ${
                     isLunas ? "bg-emerald-50 text-emerald-800 border-emerald-300" : "bg-amber-50 text-amber-800 border-amber-300"
                   }`}>
@@ -549,7 +598,7 @@ export default function FormOrderPrintPage() {
                 <div className="grid grid-cols-2 gap-3 text-[10.5px]">
                   <div className="space-y-0.5">
                     <div className="flex justify-between text-zinc-600">
-                      <span>Total Tagihan:</span>
+                      <span>{order.pricing_config?.isManualPrice ? "Total Tagihan (Borongan):" : "Total Tagihan:"}</span>
                       <strong className="font-mono text-zinc-900">{formatIDR(Number(order.total_price || 0))}</strong>
                     </div>
                     <div className="flex justify-between text-zinc-600">

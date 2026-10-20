@@ -6,7 +6,8 @@ import Link from "next/link"
 import { 
   Search, Eye, Printer, ArrowLeft, RefreshCw, 
   Layers, CheckCircle2, Package, TrendingUp, AlertCircle, 
-  Clock, Calendar, Filter, ChevronDown, ChevronUp, Wallet, Coins
+  Clock, Calendar, Filter, ChevronDown, ChevronUp, Wallet, Coins,
+  Share2, Copy, ExternalLink, MessageSquare, X
 } from "lucide-react"
 
 interface Order {
@@ -114,6 +115,11 @@ export default function OrdersListPage() {
   const [loading, setLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [query, setQuery] = useState("")
+
+  // State Modal Pelacakan Konsumen & WhatsApp
+  const [trackingModalOrder, setTrackingModalOrder] = useState<Order | null>(null)
+  const [copiedLink, setCopiedLink] = useState(false)
+  const [customerPhoneInput, setCustomerPhoneInput] = useState("")
   
   // TABS & FILTERS
   const [activeTab, setActiveTab] = useState<FilterTab>("COMPLETED")
@@ -150,7 +156,7 @@ export default function OrdersListPage() {
   const loadOrders = async (showSpinner = false) => {
     if (showSpinner) setIsRefreshing(true)
     try {
-      const { data, error } = await supabase.from("orders").select("id, order_number, order_title, customer_name, total_qty, fabric_type, current_status, priority, deadline_date, created_at, updated_at, total_price, down_payment, is_paid_off, order_type").order("created_at", { ascending: false })
+      const { data, error } = await supabase.from("orders").select("id, order_number, order_title, customer_name, customer_phone, total_qty, fabric_type, current_status, priority, deadline_date, created_at, updated_at, total_price, down_payment, is_paid_off, order_type").order("created_at", { ascending: false })
       if (!error && data) setOrders(data)
     } catch (err) {} finally {
       setLoading(false)
@@ -250,6 +256,48 @@ export default function OrdersListPage() {
       )
     })
   }, [orders, activeTab, period, customMonth, query, orderTypeFilter, priorityFilter])
+
+  // Fungsi Handler Pelacakan & WhatsApp Cepat
+  const getTrackingUrl = (orderNum: string) => {
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}/track/${orderNum}`
+    }
+    return `/track/${orderNum}`
+  }
+
+  const handleOpenTrackingModal = (o: Order) => {
+    setTrackingModalOrder(o)
+    setCopiedLink(false)
+    setCustomerPhoneInput(o.customer_phone && o.customer_phone !== "-" ? o.customer_phone : "")
+  }
+
+  const handleCopyLink = async (orderNum: string) => {
+    try {
+      await navigator.clipboard.writeText(getTrackingUrl(orderNum))
+      setCopiedLink(true)
+      setTimeout(() => setCopiedLink(false), 2500)
+    } catch {
+      alert("Gagal menyalin link.")
+    }
+  }
+
+  const handleSendWA = (o: Order) => {
+    const cleanPhone = customerPhoneInput.replace(/[^0-9]/g, "")
+    let waPhone = cleanPhone
+    if (waPhone.startsWith("0")) {
+      waPhone = "62" + waPhone.slice(1)
+    }
+
+    const trackingUrl = getTrackingUrl(o.order_number)
+    const messageText = `Halo Kak *${o.customer_name || "Pelanggan"}*,\n\nBerikut adalah tautan pemantauan langsung (*live tracking*) untuk melihat progres pengerjaan pesanan jersey *${o.order_title || o.customer_name}* di workshop kami:\n\n🔗 ${trackingUrl}\n\n📅 Target Estimasi Selesai: *${formatDateID(o.deadline_date)}*\n\nTerima kasih telah mempercayakan produksi Anda kepada kami! 🙏`
+
+    const encodedMsg = encodeURIComponent(messageText)
+    const waUrl = waPhone
+      ? `https://wa.me/${waPhone}?text=${encodedMsg}`
+      : `https://api.whatsapp.com/send?text=${encodedMsg}`
+
+    window.open(waUrl, "_blank")
+  }
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-12">
@@ -585,6 +633,14 @@ export default function OrdersListPage() {
                       {/* Kolom 7: Aksi */}
                       <td className="py-3 px-4 text-center">
                         <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenTrackingModal(o)}
+                            className="p-1.5 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded transition-colors cursor-pointer"
+                            title="Bagikan Link Pelacakan & Kirim WhatsApp"
+                          >
+                            <Share2 className="h-3.5 w-3.5 text-emerald-700" />
+                          </button>
                           <Link href={`/orders/${o.id}/spk`} target="_blank" className="p-1.5 border border-zinc-200 rounded hover:bg-zinc-100 text-zinc-600 transition-colors" title="Cetak SPK Produksi">
                             <Printer className="h-3.5 w-3.5" />
                           </Link>
@@ -601,6 +657,97 @@ export default function OrdersListPage() {
           </table>
         </div>
       </div>
+
+      {/* MODAL PELACAKAN KONSUMEN & WHATSAPP DARI DAFTAR PESANAN */}
+      {trackingModalOrder && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white border border-zinc-200 rounded-lg shadow-xl max-w-md w-full p-4 space-y-3.5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
+              <div className="flex items-center gap-1.5 text-emerald-800 font-bold text-xs">
+                <Share2 className="h-4 w-4 text-emerald-600" />
+                <span>Pelacakan Pesanan & Berbagi ke Konsumen</span>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setTrackingModalOrder(null)} 
+                className="p-1 text-zinc-400 hover:text-zinc-700 rounded cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-600 leading-relaxed">
+              Bagikan link pelacakan langsung (*live tracking*) kepada pemesan <strong className="text-zinc-900">{trackingModalOrder.customer_name}</strong> ({trackingModalOrder.order_title || trackingModalOrder.order_number}).
+            </p>
+
+            {/* Input Link & Salin */}
+            <div className="space-y-1">
+              <label className="block text-[11px] font-bold text-zinc-700">Link Pelacakan Konsumen:</label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  readOnly
+                  value={getTrackingUrl(trackingModalOrder.order_number)}
+                  className="flex-1 px-2.5 py-1.5 border border-zinc-300 rounded text-xs font-mono bg-zinc-50 text-zinc-800 focus:outline-none select-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleCopyLink(trackingModalOrder.order_number)}
+                  className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded text-xs font-semibold inline-flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  <span>{copiedLink ? "✓ Tersalin!" : "Salin Link"}</span>
+                </button>
+                <a
+                  href={getTrackingUrl(trackingModalOrder.order_number)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1.5 border border-zinc-300 rounded hover:bg-zinc-100 text-zinc-700 shrink-0"
+                  title="Buka Tampilan Konsumen"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </div>
+            </div>
+
+            {/* Kirim WhatsApp 1-Klik */}
+            <div className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-3 space-y-2">
+              <span className="text-xs font-bold text-emerald-950 block">Kirim Pesan Otomatis via WhatsApp</span>
+              <div>
+                <label className="block text-[10.5px] font-medium text-emerald-900 mb-0.5">
+                  Nomor WhatsApp Konsumen (Opsional):
+                </label>
+                <input
+                  type="text"
+                  placeholder="08xxxxxxxxxx (Boleh dikosongkan untuk pilih kontak manual)"
+                  value={customerPhoneInput}
+                  onChange={(e) => setCustomerPhoneInput(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-emerald-300 rounded text-xs font-mono bg-white text-zinc-900 focus:ring-1 focus:ring-emerald-600 focus:outline-none"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleSendWA(trackingModalOrder)}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold py-2 transition-colors shadow-2xs inline-flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                <span>Kirim Link via WhatsApp</span>
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-1 border-t border-zinc-100">
+              <button
+                type="button"
+                onClick={() => setTrackingModalOrder(null)}
+                className="px-3.5 py-1.5 border border-zinc-200 rounded text-xs font-medium text-zinc-700 hover:bg-zinc-50 cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

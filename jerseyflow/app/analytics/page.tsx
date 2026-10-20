@@ -259,7 +259,54 @@ export default function AnalyticsPage() {
   }, [periodCompletedOrders])
 
   // =========================================================================
-  // 5. TREN SEBARAN UKURAN PASAR (DARI SIZE BREAKDOWN)
+  // 5. KOMPOSISI KATEGORI PRODUK (JERSEY VS JAKET VS BAWAHAN)
+  // =========================================================================
+  const productComposition = useMemo(() => {
+    let totalPcs = 0
+    let jerseyPcs = 0
+    let jaketPcs = 0
+    let celanaPcs = 0
+
+    periodCompletedOrders.forEach((o) => {
+      if (o.size_breakdown && typeof o.size_breakdown === "object") {
+        const { adult, kid } = o.size_breakdown
+        const tally = (catObj: any) => {
+          if (!catObj || typeof catObj !== "object") return
+          Object.values(catObj).forEach((row: any) => {
+            if (!row || typeof row !== "object") return
+            Object.entries(row).forEach(([mName, count]) => {
+              const qty = Number(count || 0)
+              if (qty <= 0) return
+              totalPcs += qty
+              const lower = mName.toLowerCase()
+              if (lower.includes("jaket")) jaketPcs += qty
+              else if (lower.includes("celana") || lower.includes("training")) celanaPcs += qty
+              else jerseyPcs += qty
+            })
+          })
+        }
+        tally(adult)
+        tally(kid)
+      } else {
+        const qty = Number(o.total_qty || 0)
+        totalPcs += qty
+        jerseyPcs += qty
+      }
+    })
+
+    return {
+      totalPcs,
+      jerseyPcs,
+      jaketPcs,
+      celanaPcs,
+      jerseyPct: totalPcs > 0 ? Math.round((jerseyPcs / totalPcs) * 100) : 0,
+      jaketPct: totalPcs > 0 ? Math.round((jaketPcs / totalPcs) * 100) : 0,
+      celanaPct: totalPcs > 0 ? Math.round((celanaPcs / totalPcs) * 100) : 0,
+    }
+  }, [periodCompletedOrders])
+
+  // =========================================================================
+  // 6. TREN SEBARAN UKURAN PASAR MULTI-MODEL (DINAMIS SEMUA ITEM)
   // =========================================================================
   const sizeStats = useMemo(() => {
     const map: Record<string, number> = {}
@@ -268,23 +315,24 @@ export default function AnalyticsPage() {
     periodCompletedOrders.forEach((o) => {
       if (o.size_breakdown && typeof o.size_breakdown === "object") {
         const { adult, kid } = o.size_breakdown
-        if (adult && typeof adult === "object") {
-          Object.entries(adult).forEach(([sz, v]: [string, any]) => {
-            const qty = Number(v?.pendek || 0) + Number(v?.panjang || 0)
-            if (qty > 0) {
-              map[sz] = (map[sz] || 0) + qty
-              totalItems += qty
-            }
+
+        const processRow = (sz: string, v: any) => {
+          if (!v || typeof v !== "object") return
+          let rowQty = 0
+          Object.values(v).forEach((val) => {
+            rowQty += Number(val || 0)
           })
+          if (rowQty > 0) {
+            map[sz] = (map[sz] || 0) + rowQty
+            totalItems += rowQty
+          }
+        }
+
+        if (adult && typeof adult === "object") {
+          Object.entries(adult).forEach(([sz, v]) => processRow(sz, v))
         }
         if (kid && typeof kid === "object") {
-          Object.entries(kid).forEach(([sz, v]: [string, any]) => {
-            const qty = Number(v?.pendek || 0) + Number(v?.panjang || 0)
-            if (qty > 0) {
-              map[sz] = (map[sz] || 0) + qty
-              totalItems += qty
-            }
-          })
+          Object.entries(kid).forEach(([sz, v]) => processRow(sz, v))
         }
       }
     })
@@ -500,6 +548,38 @@ export default function AnalyticsPage() {
               <div className="flex justify-between text-[10px] text-zinc-500 font-mono pt-0.5">
                 <span>Full Order: <strong>{operationalStats.fullOrderPcs} pcs</strong></span>
                 <span>Jasa Print+Press: <strong>{operationalStats.printPressPcs} pcs</strong></span>
+              </div>
+            </div>
+
+            {/* 3. Komposisi Kategori Produk Baru */}
+            <div className="space-y-1.5 pt-2 border-t border-zinc-100">
+              <div className="flex justify-between text-xs">
+                <span className="text-zinc-600 font-medium">Komposisi Produk:</span>
+                <span className="font-mono text-xs font-bold text-zinc-900">
+                  Jersey {productComposition.jerseyPct}% &bull; Jaket {productComposition.jaketPct}% &bull; Bawahan {productComposition.celanaPct}%
+                </span>
+              </div>
+              <div className="w-full h-2.5 bg-zinc-100 rounded-full overflow-hidden flex">
+                <div 
+                  className="h-full bg-emerald-600 transition-all duration-300" 
+                  style={{ width: `${productComposition.jerseyPct}%` }} 
+                  title={`Jersey: ${productComposition.jerseyPcs} pcs`}
+                />
+                <div 
+                  className="h-full bg-blue-600 transition-all duration-300" 
+                  style={{ width: `${productComposition.jaketPct}%` }} 
+                  title={`Jaket: ${productComposition.jaketPcs} pcs`}
+                />
+                <div 
+                  className="h-full bg-purple-600 transition-all duration-300" 
+                  style={{ width: `${productComposition.celanaPct}%` }} 
+                  title={`Bawahan / Training: ${productComposition.celanaPcs} pcs`}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] text-zinc-500 font-mono pt-0.5">
+                <span>Jersey: <strong>{productComposition.jerseyPcs} pcs</strong></span>
+                <span>Jaket: <strong>{productComposition.jaketPcs} pcs</strong></span>
+                <span>Bawahan: <strong>{productComposition.celanaPcs} pcs</strong></span>
               </div>
             </div>
           </div>

@@ -61,12 +61,18 @@ export default function LoginPage() {
           .single()
 
         const userRole = (profile?.role || "ADMIN").toUpperCase()
+        const isDesigner =
+          userRole.includes("DESIGN") ||
+          userRole === "OPERATOR_DESIGN" ||
+          userRole === "DESIGNER"
         const isOperator =
-          userRole.includes("OPERATOR") ||
+          (userRole.includes("OPERATOR") && !isDesigner) ||
           userRole === "SEWING_SUPERVISOR" ||
           userRole === "QC"
 
-        if (isOperator) {
+        if (isDesigner) {
+          router.replace("/orders/studio")
+        } else if (isOperator) {
           router.replace("/kiosk")
         } else {
           router.replace("/")
