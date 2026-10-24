@@ -37,7 +37,7 @@ interface PartnerItem {
 
 type DynamicSizeMatrix = Record<string, Record<string, number>>
 
-import { FABRIC_OPTIONS, COLLAR_OPTIONS, CUSTOM_OPTION_VALUE, INK_PROFILES, PRESET_MODELS, ADULT_SIZES, KID_SIZES } from "@/lib/constants"
+import { FABRIC_OPTIONS, COLLAR_OPTIONS, CUSTOM_OPTION_VALUE, INK_PROFILES, PRESET_MODELS, ADULT_SIZES, SUPER_JUMBO_SIZES, ALL_ADULT_SIZES, KID_SIZES } from "@/lib/constants"
 
 
 
@@ -122,7 +122,7 @@ export default function OrderDetailPage() {
   // Matriks Ukuran Dinamis
   const [adultMatrix, setAdultMatrix] = useState<DynamicSizeMatrix>(() => {
     const init: DynamicSizeMatrix = {}
-    ADULT_SIZES.forEach((sz) => { init[sz] = {} })
+    ALL_ADULT_SIZES.forEach((sz) => { init[sz] = {} })
     return init
   })
 
@@ -144,8 +144,11 @@ export default function OrderDetailPage() {
   const [priceKid, setPriceKid] = useState<number>(0)
   const [pricePants, setPricePants] = useState<number>(0)
   const [feeLongSleeve, setFeeLongSleeve] = useState<number>(0)
-  const [feeJumbo, setFeeJumbo] = useState<number>(0)
-  const [discountAmount, setDiscountAmount] = useState<number>(0)
+  // Biaya Bertingkat Ukuran Jumbo (Tiered Surcharge)
+  const [feeJumbo2XL3XL, setFeeJumbo2XL3XL] = useState<number>(0)
+  const [feeJumbo4XL5XL, setFeeJumbo4XL5XL] = useState<number>(0)
+  const [feeJumbo6XL7XL, setFeeJumbo6XL7XL] = useState<number>(0)
+  const [showSuperJumbo, setShowSuperJumbo] = useState(false)
   const [downPayment, setDownPayment] = useState<number>(0)
   const [productionNotes, setProductionNotes] = useState("")
   const [catatanDesain, setCatatanDesain] = useState("")
@@ -257,8 +260,9 @@ export default function OrderDetailPage() {
         setPriceTraining(Number(oData.pricing_config.priceTraining || 0))
         setFeeLongSleeve(Number(oData.pricing_config.feeLongSleeve || 0))
         setFeeHoodie(Number(oData.pricing_config.feeHoodie || 0))
-        setFeeJumbo(Number(oData.pricing_config.feeJumbo || 0))
-        setDiscountAmount(Number(oData.pricing_config.discountAmount || 0))
+        setFeeJumbo2XL3XL(Number(oData.pricing_config.feeJumbo2XL3XL || oData.pricing_config.feeJumbo || 0))
+        setFeeJumbo4XL5XL(Number(oData.pricing_config.feeJumbo4XL5XL || 0))
+        setFeeJumbo6XL7XL(Number(oData.pricing_config.feeJumbo6XL7XL || 0))
         setIsManualPrice(Boolean(oData.pricing_config.isManualPrice))
         setManualTotalPrice(Number(oData.pricing_config.manualTotalPrice || 0))
       }
@@ -280,9 +284,10 @@ export default function OrderDetailPage() {
         }
         setActiveModels(loadedActiveModels)
 
-        // Matriks Dewasa
+        // Matriks Dewasa (Mendukung S s/d 7XL)
         const nextAdult: DynamicSizeMatrix = {}
-        ADULT_SIZES.forEach((sz) => {
+        let hasSuperData = false
+        ALL_ADULT_SIZES.forEach((sz) => {
           nextAdult[sz] = {}
           const row = bd.adult?.[sz] || {}
           if ("pendek" in row || "panjang" in row || "celana" in row) {
@@ -296,6 +301,7 @@ export default function OrderDetailPage() {
           }
         })
         setAdultMatrix(nextAdult)
+        if (SUPER_JUMBO_SIZES.some((s) => Object.values(nextAdult[s] || {}).some((v) => Number(v) > 0))) { setShowSuperJumbo(true) }
 
         // Matriks Anak
         const nextKid: DynamicSizeMatrix = {}
@@ -400,7 +406,7 @@ export default function OrderDetailPage() {
     activeModels.forEach((m) => { modelTotals[m] = 0 })
 
     let adultTotalPcs = 0
-    ADULT_SIZES.forEach((sz) => {
+    ALL_ADULT_SIZES.forEach((sz) => {
       const row = adultMatrix[sz] || {}
       activeModels.forEach((m) => {
         const count = Number(row[m] || 0)
@@ -439,9 +445,12 @@ export default function OrderDetailPage() {
     let subtotal = 0
 
     // 1. Dewasa
-    ADULT_SIZES.forEach((sz) => {
-      const isJumbo = sz === "2XL" || sz === "3XL" || sz === "4XL"
-      const jumboSurcharge = isJumbo ? feeJumbo : 0
+    ALL_ADULT_SIZES.forEach((sz) => {
+      let jumboSurcharge = 0
+      if (sz === "2XL" || sz === "3XL") jumboSurcharge = feeJumbo2XL3XL
+      else if (sz === "4XL" || sz === "5XL") jumboSurcharge = feeJumbo4XL5XL
+      else if (sz === "6XL" || sz === "7XL") jumboSurcharge = feeJumbo6XL7XL
+
       const row = adultMatrix[sz] || {}
 
       activeModels.forEach((m) => {
@@ -492,7 +501,7 @@ export default function OrderDetailPage() {
       })
     })
 
-    const finalCalc = subtotal - discountAmount
+    const finalCalc = subtotal
     return finalCalc > 0 ? finalCalc : 0
   }, [
     isManualPrice,
@@ -507,8 +516,9 @@ export default function OrderDetailPage() {
     feeHoodie,
     pricePants,
     priceTraining,
-    feeJumbo,
-    discountAmount
+    feeJumbo2XL3XL,
+    feeJumbo4XL5XL,
+    feeJumbo6XL7XL
   ])
 
   const sisaPiutang = useMemo(() => {
@@ -700,7 +710,7 @@ export default function OrderDetailPage() {
           cutting_location: cuttingLocation,
           pricing_config: {
             priceAdult, priceKid, pricePants, priceJacket, priceTraining,
-            feeLongSleeve, feeHoodie, feeJumbo, discountAmount,
+            feeLongSleeve, feeHoodie, feeJumbo2XL3XL, feeJumbo4XL5XL, feeJumbo6XL7XL,
             isManualPrice, manualTotalPrice
           },
           size_breakdown: {
@@ -1598,15 +1608,24 @@ export default function OrderDetailPage() {
                   </div>
                 )}
 
-                {/* 4. Biaya Tambahan Global */}
-                <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                  <div>
-                    <label className="block text-zinc-600 font-medium mb-0.5 text-[9.5px]">+ Jumbo 2XL+ (Rp)</label>
-                    <input type="text" placeholder="0" disabled={isLocked || isDesignerRole} value={formatRibuan(feeJumbo)} onChange={(e) => setFeeJumbo(parseRibuan(e.target.value))} className="w-full px-1.5 py-0.5 border border-zinc-300 rounded font-mono text-xs bg-white disabled:bg-zinc-100" />
-                  </div>
-                  <div>
-                    <label className="block text-red-600 font-medium mb-0.5 text-[9.5px]">Diskon (Rp)</label>
-                    <input type="text" placeholder="0" disabled={isLocked || isDesignerRole} value={formatRibuan(discountAmount)} onChange={(e) => setDiscountAmount(parseRibuan(e.target.value))} className="w-full px-1.5 py-0.5 border border-zinc-300 rounded font-mono text-red-600 font-bold text-xs bg-white disabled:bg-zinc-100" />
+                {/* 4. Tambahan Ukuran Jumbo Bertingkat (3 Kolom Ringkas) */}
+                <div className="bg-zinc-50/80 p-1.5 rounded border border-zinc-200/80 space-y-1">
+                  <span className="text-[9px] font-bold text-zinc-600 uppercase block tracking-wider">
+                    Tambahan Ukuran Jumbo Bertingkat (Rp)
+                  </span>
+                  <div className="grid grid-cols-3 gap-1">
+                    <div>
+                      <label className="block text-zinc-600 font-semibold mb-0.5 text-[8.5px] text-center">2XL - 3XL</label>
+                      <input type="text" placeholder="0" disabled={isLocked || isDesignerRole} value={formatRibuan(feeJumbo2XL3XL)} onChange={(e) => setFeeJumbo2XL3XL(parseRibuan(e.target.value))} className="w-full px-1 py-0.5 border border-zinc-300 rounded font-mono text-xs bg-white text-center disabled:bg-zinc-100" />
+                    </div>
+                    <div>
+                      <label className="block text-blue-900 font-semibold mb-0.5 text-[8.5px] text-center">4XL - 5XL</label>
+                      <input type="text" placeholder="0" disabled={isLocked || isDesignerRole} value={formatRibuan(feeJumbo4XL5XL)} onChange={(e) => setFeeJumbo4XL5XL(parseRibuan(e.target.value))} className="w-full px-1 py-0.5 border border-blue-300 rounded font-mono text-xs bg-white text-center disabled:bg-zinc-100" />
+                    </div>
+                    <div>
+                      <label className="block text-purple-900 font-semibold mb-0.5 text-[8.5px] text-center">6XL - 7XL</label>
+                      <input type="text" placeholder="0" disabled={isLocked || isDesignerRole} value={formatRibuan(feeJumbo6XL7XL)} onChange={(e) => setFeeJumbo6XL7XL(parseRibuan(e.target.value))} className="w-full px-1 py-0.5 border border-purple-300 rounded font-mono text-xs bg-white text-center disabled:bg-zinc-100" />
+                    </div>
                   </div>
                 </div>
 
@@ -1752,13 +1771,16 @@ export default function OrderDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-200">
-                  {ADULT_SIZES.map((sz) => {
+                  {(showSuperJumbo ? ALL_ADULT_SIZES : ADULT_SIZES).map((sz) => {
                     const row = adultMatrix[sz] || {}
                     const rowSubtotal = activeModels.reduce((sum, m) => sum + Number(row[m] || 0), 0)
+                    const isSuper = SUPER_JUMBO_SIZES.includes(sz)
 
                     return (
-                      <tr key={sz} className="hover:bg-zinc-100/60">
-                        <td className="py-1 px-1.5 font-bold font-mono text-zinc-800">{sz}</td>
+                      <tr key={sz} className={`hover:bg-zinc-100/60 ${isSuper ? "bg-amber-50/50" : ""}`}>
+                        <td className="py-1 px-1.5 font-bold font-mono text-zinc-800">
+                          <span className={isSuper ? "text-amber-950 font-black" : ""}>{sz}</span>
+                        </td>
                         {activeModels.map((m) => (
                           <td key={m} className="py-1 px-1 text-center">
                             <input
@@ -1767,7 +1789,9 @@ export default function OrderDetailPage() {
                               disabled={isLocked || isDesignerRole}
                               value={row[m] || ""}
                               onChange={(e) => handleMatrixChange("adult", sz, m, Number(e.target.value) || 0)}
-                              className="w-12 text-center py-0.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900 bg-white disabled:bg-zinc-100"
+                              className={`w-12 text-center py-0.5 border rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900 bg-white disabled:bg-zinc-100 ${
+                                isSuper ? "border-amber-300 font-bold" : "border-zinc-300"
+                              }`}
                               placeholder="0"
                             />
                           </td>
@@ -1780,6 +1804,15 @@ export default function OrderDetailPage() {
                   })}
                 </tbody>
               </table>
+
+              {/* Tombol Sakelar On-Demand Super Jumbo */}
+              <button
+                type="button"
+                onClick={() => setShowSuperJumbo(!showSuperJumbo)}
+                className="w-full mt-1.5 py-1 px-2 border border-dashed border-zinc-300 hover:border-zinc-500 rounded text-[10px] font-bold text-zinc-600 hover:text-zinc-900 bg-zinc-50 hover:bg-zinc-100 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+              >
+                <span>{showSuperJumbo ? "▲ Sembunyikan Super Jumbo (4XL - 7XL)" : "+ Buka Ukuran Super Jumbo (4XL - 7XL)"}</span>
+              </button>
             </div>
           </div>
 

@@ -36,6 +36,8 @@ export const INK_PROFILES = {
 } as const
 
 export const ADULT_SIZES = ["S", "M", "L", "XL", "2XL", "3XL"]
+export const SUPER_JUMBO_SIZES = ["4XL", "5XL", "6XL", "7XL"]
+export const ALL_ADULT_SIZES = ["S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "6XL", "7XL"]
 export const KID_SIZES = ["S Anak", "M Anak", "L Anak", "XL Anak"]
 
 export interface PresetModelItem {

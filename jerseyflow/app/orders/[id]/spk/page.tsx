@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { QRCodeSVG } from "qrcode.react"
 import { Printer } from "lucide-react"
 
-import { ADULT_SIZES, KID_SIZES } from "@/lib/constants"
+import { ADULT_SIZES, SUPER_JUMBO_SIZES, ALL_ADULT_SIZES, KID_SIZES } from "@/lib/constants"
 
 interface OrderDetail {
   id: string
@@ -131,8 +131,15 @@ export default function SPKPrintPage() {
       kidModelTotals[m] = 0
     })
 
+    // Deteksi ukuran super jumbo yang ada isinya (> 0)
+    const activeSuperJumbo = SUPER_JUMBO_SIZES.filter((sz) => {
+      const row = adult[sz] || {}
+      return activeModels.some((m) => getCount(row, m) > 0)
+    })
+    const printedAdultSizes = [...ADULT_SIZES, ...activeSuperJumbo]
+
     let adultGrandTotal = 0
-    ADULT_SIZES.forEach((sz) => {
+    printedAdultSizes.forEach((sz) => {
       const row = adult[sz] || {}
       activeModels.forEach((m) => {
         const count = getCount(row, m)
@@ -166,6 +173,7 @@ export default function SPKPrintPage() {
       adultGrandTotal,
       kidGrandTotal,
       grandTotalPcs,
+      printedAdultSizes,
     }
   }, [order])
 
@@ -431,7 +439,7 @@ export default function SPKPrintPage() {
                           })}
 
                           {/* Baris Spacer Sejajar Horisontal dengan Size Dewasa */}
-                          {Array.from({ length: Math.max(0, ADULT_SIZES.length - KID_SIZES.length) }).map((_, idx) => (
+                          {Array.from({ length: Math.max(0, matrixCalculation.printedAdultSizes.length - KID_SIZES.length) }).map((_, idx) => (
                             <tr key={`spacer-${idx}`} className="border-b border-black/40 font-mono">
                               <td className="py-0.5 px-1 border-r border-black bg-zinc-50 text-[10.5px] text-transparent select-none">-</td>
                               {matrixCalculation.activeModels.map((m) => (
@@ -474,7 +482,7 @@ export default function SPKPrintPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {ADULT_SIZES.map((sz) => {
+                          {matrixCalculation.printedAdultSizes.map((sz) => {
                             const r = matrixCalculation.adult[sz] || {}
                             const rowSubtotal = matrixCalculation.activeModels.reduce(
                               (sum, m) => sum + matrixCalculation.getCount(r, m), 0
