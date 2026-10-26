@@ -5,7 +5,21 @@ import { useParams } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { Printer, ShieldCheck, UserCheck } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
-import { ADULT_SIZES, SUPER_JUMBO_SIZES, ALL_ADULT_SIZES, KID_SIZES } from "@/lib/constants"
+import {
+  FABRIC_OPTIONS,
+  COLLAR_OPTIONS,
+  CUSTOM_OPTION_VALUE,
+  INK_PROFILES,
+  PRESET_MODELS,
+  ADULT_REGULAR_SIZES,
+  SUPER_JUMBO_SIZES,
+  ALL_ADULT_SIZES,
+  ADULT_SIZES,
+  KID_TODDLER_SIZES,
+  KID_JUNIOR_SIZES,
+  ALL_KID_SIZES,
+  KID_SIZES
+} from "@/lib/constants"
 
 interface OrderDetail {
   id: string
@@ -143,12 +157,18 @@ export default function FormOrderPrintPage() {
       kidModelTotals[m] = 0
     })
 
-    // Deteksi ukuran super jumbo yang ada isinya (> 0)
+    // Smart Print: Hanya cetak Balita & Super Jumbo jika ada jumlah pcs-nya (> 0)
+    const activeToddler = KID_TODDLER_SIZES.filter((sz) => {
+      const row = kid[sz] || {}
+      return activeModels.some((m) => getCount(row, m) > 0)
+    })
+    const printedKidSizes = [...activeToddler, ...KID_JUNIOR_SIZES]
+
     const activeSuperJumbo = SUPER_JUMBO_SIZES.filter((sz) => {
       const row = adult[sz] || {}
       return activeModels.some((m) => getCount(row, m) > 0)
     })
-    const printedAdultSizes = [...ADULT_SIZES, ...activeSuperJumbo]
+    const printedAdultSizes = [...ADULT_REGULAR_SIZES, ...activeSuperJumbo]
 
     let adultGrandTotal = 0
     printedAdultSizes.forEach((sz) => {
@@ -162,7 +182,7 @@ export default function FormOrderPrintPage() {
     })
 
     let kidGrandTotal = 0
-    KID_SIZES.forEach((sz) => {
+    printedKidSizes.forEach((sz) => {
       const row = kid[sz] || {}
       activeModels.forEach((m) => {
         const count = getCount(row, m)
@@ -186,6 +206,7 @@ export default function FormOrderPrintPage() {
       kidGrandTotal,
       grandTotalPcs,
       printedAdultSizes,
+      printedKidSizes,
     }
   }, [order])
 
@@ -463,7 +484,7 @@ export default function FormOrderPrintPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {KID_SIZES.map((sz) => {
+                          {matrixCalculation.printedKidSizes.map((sz) => {
                             const r = matrixCalculation.kid[sz] || {}
                             const rowSubtotal = matrixCalculation.activeModels.reduce(
                               (sum, m) => sum + matrixCalculation.getCount(r, m), 0
@@ -486,7 +507,7 @@ export default function FormOrderPrintPage() {
                           })}
 
                           {/* Baris Spacer Sejajar Horisontal dengan Size Dewasa */}
-                          {Array.from({ length: Math.max(0, matrixCalculation.printedAdultSizes.length - KID_SIZES.length) }).map((_, idx) => (
+                          {Array.from({ length: Math.max(0, matrixCalculation.printedAdultSizes.length - matrixCalculation.printedKidSizes.length) }).map((_, idx) => (
                             <tr key={`spacer-${idx}`} className="border-b border-black/40 font-mono">
                               <td className="py-0.5 px-1 border-r border-black bg-zinc-50 text-[10.5px] text-transparent select-none">-</td>
                               {matrixCalculation.activeModels.map((m) => (

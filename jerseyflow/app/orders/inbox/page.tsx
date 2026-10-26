@@ -237,7 +237,7 @@ export default function OrderInboxPage() {
       {/* Tabel Inbox */}
       <div className="border border-zinc-200 bg-white rounded shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs whitespace-nowrap">
             <thead className="bg-zinc-100/80 border-b border-zinc-200 text-zinc-600 font-semibold uppercase text-[10px]">
               <tr>
                 <th className="py-2.5 px-3">No Order</th>
@@ -269,36 +269,40 @@ export default function OrderInboxPage() {
 
                   return (
                     <tr key={o.id} className="hover:bg-zinc-50/70 transition-colors">
-                      {/* No Order */}
+                      {/* No Order (Bisa diklik untuk review) */}
                       <td className="py-3 px-3">
-                        <span className="font-mono font-bold text-zinc-900 block">{o.order_number}</span>
+                        <Link href={`/orders/${o.id}`} className="font-mono font-bold text-zinc-900 hover:text-blue-600 hover:underline block" title="Klik untuk Review / Edit Rincian">
+                          {o.order_number}
+                        </Link>
                         <span className="text-[10px] text-zinc-400 font-mono">Masuk: {formatDateID(o.created_at)}</span>
                       </td>
 
-                      {/* Nama Order & Pemesan */}
+                      {/* Nama Order & Pemesan (Bisa diklik untuk review) */}
                       <td className="py-3 px-3">
-                        <strong className="block font-black text-zinc-950 text-[11.5px] leading-tight uppercase">
+                        <Link href={`/orders/${o.id}`} className="block font-black text-zinc-950 text-[11.5px] leading-tight uppercase hover:text-blue-600 hover:underline" title="Klik untuk Review / Edit Rincian">
                           {o.order_title || o.customer_name}
-                        </strong>
+                        </Link>
                         <span className="text-[10px] text-zinc-500 font-medium">
                           Pemesan: {o.customer_name}
                         </span>
                       </td>
 
-                      {/* Spesifikasi & Qty */}
-                      <td className="py-3 px-3">
-                        <span className="block text-zinc-800 font-semibold text-[11px]">{o.fabric_type}</span>
-                        <strong className="font-mono text-zinc-950 text-xs block">{o.total_qty} pcs</strong>
+                      {/* Spesifikasi & Qty (Dengan Model Item Rapi) */}
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-zinc-900 text-xs">{o.fabric_type}</span>
+                          <span className="text-zinc-300">&bull;</span>
+                          <strong className="font-mono text-zinc-950 text-[11px] bg-zinc-100 px-1.5 py-0.2 rounded border border-zinc-200 shrink-0">
+                            {o.total_qty} pcs
+                          </strong>
+                        </div>
                         {Array.isArray(o.size_breakdown?.active_models) && o.size_breakdown.active_models.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {o.size_breakdown.active_models.slice(0, 3).map((m: string) => (
-                              <span key={m} className="px-1.5 py-0.2 bg-zinc-100 text-zinc-700 text-[9px] font-mono rounded border border-zinc-200">
+                          <div className="flex flex-wrap items-center gap-1 mt-1">
+                            {o.size_breakdown.active_models.map((m: string) => (
+                              <span key={m} className="px-1.5 py-0.2 bg-zinc-100 text-zinc-800 text-[9px] font-mono font-medium rounded border border-zinc-200">
                                 {m}
                               </span>
                             ))}
-                            {o.size_breakdown.active_models.length > 3 && (
-                              <span className="text-[9px] text-zinc-400 font-mono">+{o.size_breakdown.active_models.length - 3}</span>
-                            )}
                           </div>
                         )}
                       </td>
@@ -339,27 +343,18 @@ export default function OrderInboxPage() {
                         </select>
                       </td>
 
-                      {/* Aksi Kirim ke Kanban */}
-                      <td className="py-3 px-3 text-right">
-                        <div className="inline-flex items-center gap-1.5">
-                          <Link
-                            href={`/orders/${o.id}`}
-                            className="p-1.5 border border-zinc-200 rounded hover:bg-zinc-100 text-zinc-900 transition-colors"
-                            title="Lihat Detail Order"
-                          >
-                            <FileText className="h-3.5 w-3.5 text-zinc-700" />
-                          </Link>
-                          <button
-                            type="button"
-                            disabled={isProcessing || !currentSelectedDesigner}
-                            onClick={() => handleDispatchToDesign(o)}
-                            className="inline-flex items-center gap-1 bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-bold px-3 py-1.5 rounded transition-colors disabled:opacity-30 shadow-2xs cursor-pointer"
-                            title="Kirim ke Papan Kanban Pos 01 (Desain)"
-                          >
-                            <Sparkles className="h-3 w-3 text-amber-400" />
-                            <span>{isProcessing ? "Mengirim..." : "Kirim ke Desain"}</span>
-                          </button>
-                        </div>
+                      {/* Aksi Kirim ke Desainer (Review cukup klik nomor/nama order) */}
+                      <td className="py-2.5 px-3 text-right">
+                        <button
+                          type="button"
+                          disabled={isProcessing || !currentSelectedDesigner}
+                          onClick={() => handleDispatchToDesign(o)}
+                          className="inline-flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-bold px-3 py-1.5 rounded transition-colors disabled:opacity-30 shadow-2xs cursor-pointer"
+                          title="Kirim ke Papan Kanban Pos 01 (Desain)"
+                        >
+                          <Sparkles className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                          <span>{isProcessing ? "Mengirim..." : "Kirim ke Desain"}</span>
+                        </button>
                       </td>
                     </tr>
                   )

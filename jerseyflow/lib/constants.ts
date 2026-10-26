@@ -35,11 +35,6 @@ export const INK_PROFILES = {
   CINA: ["2 PAS", "2 PAS BARU"],
 } as const
 
-export const ADULT_SIZES = ["S", "M", "L", "XL", "2XL", "3XL"]
-export const SUPER_JUMBO_SIZES = ["4XL", "5XL", "6XL", "7XL"]
-export const ALL_ADULT_SIZES = ["S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "6XL", "7XL"]
-export const KID_SIZES = ["S Anak", "M Anak", "L Anak", "XL Anak"]
-
 export interface PresetModelItem {
   key: string
   label: string
@@ -58,3 +53,15 @@ export const PRESET_MODELS: PresetModelItem[] = [
   { key: "Celana Pendek", label: "Celana Pendek", category: "celana" },
   { key: "Celana Training", label: "Celana Training", category: "celana" },
 ]
+
+// MASTER UKURAN DEWASA
+export const ADULT_REGULAR_SIZES = ["XS", "S", "M", "L", "XL", "2XL", "3XL"]
+export const SUPER_JUMBO_SIZES = ["4XL", "5XL", "6XL", "7XL", "8XL", "9XL", "10XL"]
+export const ALL_ADULT_SIZES = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "6XL", "7XL", "8XL", "9XL", "10XL"]
+export const ADULT_SIZES = ADULT_REGULAR_SIZES
+
+// MASTER UKURAN ANAK
+export const KID_TODDLER_SIZES = ["2 Thn", "3 Thn", "4 Thn", "5 Thn"]
+export const KID_JUNIOR_SIZES = ["S Anak", "M Anak", "L Anak", "XL Anak", "XXL Anak"]
+export const ALL_KID_SIZES = ["2 Thn", "3 Thn", "4 Thn", "5 Thn", "S Anak", "M Anak", "L Anak", "XL Anak", "XXL Anak"]
+export const KID_SIZES = ALL_KID_SIZES

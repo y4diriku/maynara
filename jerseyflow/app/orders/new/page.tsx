@@ -26,7 +26,21 @@ interface PartnerItem {
 
 type DynamicSizeMatrix = Record<string, Record<string, number>>
 
-import { FABRIC_OPTIONS, COLLAR_OPTIONS, CUSTOM_OPTION_VALUE, INK_PROFILES, PRESET_MODELS, ADULT_SIZES, SUPER_JUMBO_SIZES, ALL_ADULT_SIZES, KID_SIZES } from "@/lib/constants"
+import {
+  FABRIC_OPTIONS,
+  COLLAR_OPTIONS,
+  CUSTOM_OPTION_VALUE,
+  INK_PROFILES,
+  PRESET_MODELS,
+  ADULT_REGULAR_SIZES,
+  SUPER_JUMBO_SIZES,
+  ALL_ADULT_SIZES,
+  ADULT_SIZES,
+  KID_TODDLER_SIZES,
+  KID_JUNIOR_SIZES,
+  ALL_KID_SIZES,
+  KID_SIZES
+} from "@/lib/constants"
 
 function formatRibuan(num: number): string {
   if (!num || isNaN(num)) return ""
@@ -84,11 +98,16 @@ export default function NewOrderPage() {
   const [feeHoodie, setFeeHoodie] = useState<number>(0)
   const [pricePants, setPricePants] = useState<number>(0)
   const [priceTraining, setPriceTraining] = useState<number>(0)
-  // Biaya Bertingkat Ukuran Jumbo (Tiered Surcharge)
+  // Biaya Bertingkat Ukuran Jumbo (4 Tier)
   const [feeJumbo2XL3XL, setFeeJumbo2XL3XL] = useState<number>(0)
   const [feeJumbo4XL5XL, setFeeJumbo4XL5XL] = useState<number>(0)
   const [feeJumbo6XL7XL, setFeeJumbo6XL7XL] = useState<number>(0)
+  const [feeJumbo8XL10XL, setFeeJumbo8XL10XL] = useState<number>(0)
+
+  // Sakelar Filter Ukuran Tampilan
   const [showSuperJumbo, setShowSuperJumbo] = useState(false)
+  const [showKidToddler, setShowKidToddler] = useState(false)
+  const [showKidJunior, setShowKidJunior] = useState(true)
   const [downPayment, setDownPayment] = useState<number>(0)
 
   // Sakelar Kunci Harga Paket Borongan (Override Manual)
@@ -104,7 +123,7 @@ export default function NewOrderPage() {
 
   const [kidMatrix, setKidMatrix] = useState<DynamicSizeMatrix>(() => {
     const init: DynamicSizeMatrix = {}
-    KID_SIZES.forEach((sz) => { init[sz] = {} })
+    ALL_KID_SIZES.forEach((sz) => { init[sz] = {} })
     return init
   })
 
@@ -252,6 +271,7 @@ export default function NewOrderPage() {
       if (sz === "2XL" || sz === "3XL") jumboSurcharge = feeJumbo2XL3XL
       else if (sz === "4XL" || sz === "5XL") jumboSurcharge = feeJumbo4XL5XL
       else if (sz === "6XL" || sz === "7XL") jumboSurcharge = feeJumbo6XL7XL
+      else if (sz === "8XL" || sz === "9XL" || sz === "10XL") jumboSurcharge = feeJumbo8XL10XL
 
       const row = adultMatrix[sz] || {}
 
@@ -321,7 +341,8 @@ export default function NewOrderPage() {
     priceTraining,
     feeJumbo2XL3XL,
     feeJumbo4XL5XL,
-    feeJumbo6XL7XL
+    feeJumbo6XL7XL,
+    feeJumbo8XL10XL
   ])
 
   const sisaPiutang = useMemo(() => {
@@ -937,62 +958,74 @@ export default function NewOrderPage() {
                   </div>
                 )}
 
-                {/* 4. Tambahan Ukuran Jumbo Bertingkat (3 Kolom Ringkas) */}
+                {/* 4. Tambahan Ukuran Jumbo Bertingkat (4 Kolom Ringkas) */}
                 <div className="bg-zinc-50/80 p-1.5 rounded border border-zinc-200/80 space-y-1">
                   <span className="text-[9px] font-bold text-zinc-600 uppercase block tracking-wider">
-                    Tambahan Ukuran Jumbo Bertingkat (Rp)
+                    Tambahan Jumbo Bertingkat (Rp)
                   </span>
-                  <div className="grid grid-cols-3 gap-1">
+                  <div className="grid grid-cols-4 gap-1">
                     <div>
-                      <label className="block text-zinc-600 font-semibold mb-0.5 text-[8.5px] text-center">2XL - 3XL</label>
-                      <input type="text" placeholder="0" value={formatRibuan(feeJumbo2XL3XL)} onChange={(e) => setFeeJumbo2XL3XL(parseRibuan(e.target.value))} className="w-full px-1 py-0.5 border border-zinc-300 rounded font-mono text-xs bg-white text-center" />
+                      <label className="block text-zinc-600 font-semibold mb-0.5 text-[8px] text-center">2XL - 3XL</label>
+                      <input type="text" placeholder="0" value={formatRibuan(feeJumbo2XL3XL)} onChange={(e) => setFeeJumbo2XL3XL(parseRibuan(e.target.value))} className="w-full px-1 py-0.5 border border-zinc-300 rounded font-mono text-[11px] bg-white text-center" />
                     </div>
                     <div>
-                      <label className="block text-blue-900 font-semibold mb-0.5 text-[8.5px] text-center">4XL - 5XL</label>
-                      <input type="text" placeholder="0" value={formatRibuan(feeJumbo4XL5XL)} onChange={(e) => setFeeJumbo4XL5XL(parseRibuan(e.target.value))} className="w-full px-1 py-0.5 border border-blue-300 rounded font-mono text-xs bg-white text-center" />
+                      <label className="block text-blue-900 font-semibold mb-0.5 text-[8px] text-center">4XL - 5XL</label>
+                      <input type="text" placeholder="0" value={formatRibuan(feeJumbo4XL5XL)} onChange={(e) => setFeeJumbo4XL5XL(parseRibuan(e.target.value))} className="w-full px-1 py-0.5 border border-blue-300 rounded font-mono text-[11px] bg-white text-center" />
                     </div>
                     <div>
-                      <label className="block text-purple-900 font-semibold mb-0.5 text-[8.5px] text-center">6XL - 7XL</label>
-                      <input type="text" placeholder="0" value={formatRibuan(feeJumbo6XL7XL)} onChange={(e) => setFeeJumbo6XL7XL(parseRibuan(e.target.value))} className="w-full px-1 py-0.5 border border-purple-300 rounded font-mono text-xs bg-white text-center" />
+                      <label className="block text-purple-900 font-semibold mb-0.5 text-[8px] text-center">6XL - 7XL</label>
+                      <input type="text" placeholder="0" value={formatRibuan(feeJumbo6XL7XL)} onChange={(e) => setFeeJumbo6XL7XL(parseRibuan(e.target.value))} className="w-full px-1 py-0.5 border border-purple-300 rounded font-mono text-[11px] bg-white text-center" />
+                    </div>
+                    <div>
+                      <label className="block text-emerald-900 font-semibold mb-0.5 text-[8px] text-center">8XL - 10XL</label>
+                      <input type="text" placeholder="0" value={formatRibuan(feeJumbo8XL10XL)} onChange={(e) => setFeeJumbo8XL10XL(parseRibuan(e.target.value))} className="w-full px-1 py-0.5 border border-emerald-300 rounded font-mono text-[11px] bg-white text-center" />
                     </div>
                   </div>
                 </div>
 
-                {/* Total Tagihan */}
-                <div className="pt-1 border-t border-zinc-800">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <label className="block text-zinc-900 font-bold text-[10px]">TOTAL TAGIHAN (Rp)</label>
-                    {isManualPrice && (
-                      <span className="text-[9px] font-mono text-purple-700 bg-purple-100 px-1 rounded font-bold">Mode Borongan</span>
+                {/* Total Tagihan & DP Berdampingan (Satu Baris Rapi) */}
+                <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-zinc-800">
+                  <div>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <label className="block text-zinc-900 font-bold text-[9.5px]">TOTAL TAGIHAN (Rp)</label>
+                      {isManualPrice && (
+                        <span className="text-[8px] font-mono text-purple-700 bg-purple-100 px-1 rounded font-bold">Borongan</span>
+                      )}
+                    </div>
+                    {isManualPrice ? (
+                      <input
+                        type="text"
+                        placeholder="0"
+                        value={formatRibuan(manualTotalPrice)}
+                        onChange={(e) => setManualTotalPrice(parseRibuan(e.target.value))}
+                        className="w-full px-1.5 py-1 border-2 border-purple-600 rounded font-mono font-black text-purple-900 bg-purple-50/50 text-xs focus:ring-1 focus:ring-purple-600 focus:outline-none"
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        readOnly
+                        value={formatRibuan(totalPrice)}
+                        className="w-full px-1.5 py-1 border-2 border-zinc-900 rounded font-mono font-black bg-zinc-100 text-zinc-900 cursor-not-allowed text-xs"
+                      />
                     )}
                   </div>
-                  {isManualPrice ? (
+
+                  <div>
+                    <label className="block text-zinc-600 font-medium mb-0.5 text-[9.5px]">Uang Muka / DP (Rp)</label>
                     <input
                       type="text"
                       placeholder="0"
-                      value={formatRibuan(manualTotalPrice)}
-                      onChange={(e) => setManualTotalPrice(parseRibuan(e.target.value))}
-                      className="w-full px-2 py-1 border-2 border-purple-600 rounded font-mono font-black text-purple-900 bg-purple-50/50 text-xs focus:ring-1 focus:ring-purple-600 focus:outline-none"
+                      value={formatRibuan(downPayment)}
+                      onChange={(e) => setDownPayment(parseRibuan(e.target.value))}
+                      className="w-full px-1.5 py-1 border border-zinc-300 rounded font-mono font-bold text-emerald-700 focus:ring-1 focus:ring-emerald-600 focus:outline-none text-xs bg-white"
                     />
-                  ) : (
-                    <input
-                      type="text"
-                      readOnly
-                      value={formatRibuan(totalPrice)}
-                      className="w-full px-2 py-1 border-2 border-zinc-900 rounded font-mono font-black bg-zinc-100 text-zinc-900 cursor-not-allowed text-xs"
-                    />
-                  )}
-                </div>
-
-                <div className="pt-0.5">
-                  <label className="block text-zinc-600 font-medium mb-0.5 text-[9.5px]">Uang Muka / DP (Rp)</label>
-                  <input type="text" placeholder="0" value={formatRibuan(downPayment)} onChange={(e) => setDownPayment(parseRibuan(e.target.value))} className="w-full px-2 py-1 border border-zinc-300 rounded font-mono font-bold text-emerald-700 focus:ring-1 focus:ring-emerald-600 focus:outline-none text-xs bg-white" />
+                  </div>
                 </div>
               </div>
             </div>
 
             <div className="pt-1.5 border-t border-zinc-200 flex justify-between items-center text-xs mt-auto">
-              <span className="text-zinc-600 font-bold">SISA TAGIHAN:</span>
+              <span className="text-zinc-600 font-bold text-[11px]">SISA TAGIHAN:</span>
               <span className="font-black font-mono text-sm text-red-600">
                 Rp {sisaPiutang.toLocaleString("id-ID")}
               </span>
@@ -1021,15 +1054,40 @@ export default function NewOrderPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* 1. Size Anak */}
+            {/* 1. Size Anak (Dengan Sakelar Filter Balita / Junior) */}
             <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/40 space-y-2 overflow-x-auto">
-              <div className="flex items-center justify-between border-b border-zinc-200 pb-1">
-                <span className="text-xs font-bold text-zinc-800 uppercase flex items-center gap-1">
+              <div className="flex items-center justify-between border-b border-zinc-200 pb-1 gap-2">
+                <span className="text-xs font-bold text-zinc-800 uppercase flex items-center gap-1 shrink-0">
                   🧒 Size Anak
                 </span>
-                <span className="font-mono text-[11px] font-bold text-zinc-700">
-                  Total Anak: {matrixTotals.kidTotalPcs} pcs
-                </span>
+
+                {/* Sakelar Filter Mini */}
+                <div className="flex items-center gap-1 text-[9.5px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (showKidJunior && !showKidToddler) setShowKidToddler(true)
+                      else setShowKidJunior(!showKidJunior)
+                    }}
+                    className={`px-1.5 py-0.5 rounded border font-semibold cursor-pointer transition-colors ${
+                      showKidJunior ? "bg-zinc-900 text-white border-zinc-900 shadow-2xs" : "bg-white text-zinc-600 border-zinc-300 hover:bg-zinc-100"
+                    }`}
+                  >
+                    Junior (S-XXL)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (showKidToddler && !showKidJunior) setShowKidJunior(true)
+                      else setShowKidToddler(!showKidToddler)
+                    }}
+                    className={`px-1.5 py-0.5 rounded border font-semibold cursor-pointer transition-colors ${
+                      showKidToddler ? "bg-blue-700 text-white border-blue-700 shadow-2xs" : "bg-white text-blue-800 border-blue-200 hover:bg-blue-50"
+                    }`}
+                  >
+                    + Balita (2-5 Thn)
+                  </button>
+                </div>
               </div>
 
               <table className="w-full text-left text-xs min-w-full">
@@ -1045,13 +1103,16 @@ export default function NewOrderPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-200">
-                  {KID_SIZES.map((sz) => {
+                  {[...(showKidToddler ? KID_TODDLER_SIZES : []), ...(showKidJunior ? KID_JUNIOR_SIZES : [])].map((sz) => {
                     const row = kidMatrix[sz] || {}
                     const rowSubtotal = activeModels.reduce((sum, m) => sum + Number(row[m] || 0), 0)
+                    const isToddler = KID_TODDLER_SIZES.includes(sz)
 
                     return (
-                      <tr key={sz} className="hover:bg-zinc-100/60">
-                        <td className="py-1 px-1.5 font-bold font-mono text-zinc-800 text-[11px]">{sz}</td>
+                      <tr key={sz} className={`hover:bg-zinc-100/60 ${isToddler ? "bg-blue-50/40" : ""}`}>
+                        <td className="py-1 px-1.5 font-bold font-mono text-zinc-800 text-[11px]">
+                          <span className={isToddler ? "text-blue-900 font-black" : ""}>{sz}</span>
+                        </td>
                         {activeModels.map((m) => (
                           <td key={m} className="py-1 px-1 text-center">
                             <input
@@ -1059,7 +1120,9 @@ export default function NewOrderPage() {
                               min="0"
                               value={row[m] || ""}
                               onChange={(e) => handleMatrixChange("kid", sz, m, Number(e.target.value) || 0)}
-                              className="w-12 text-center py-0.5 border border-zinc-300 rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900 bg-white"
+                              className={`w-12 text-center py-0.5 border rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900 bg-white ${
+                                isToddler ? "border-blue-300 font-bold" : "border-zinc-300"
+                              }`}
                               placeholder="0"
                             />
                           </td>
@@ -1098,7 +1161,7 @@ export default function NewOrderPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-200">
-                  {(showSuperJumbo ? ALL_ADULT_SIZES : ADULT_SIZES).map((sz) => {
+                  {(showSuperJumbo ? ALL_ADULT_SIZES : ADULT_REGULAR_SIZES).map((sz) => {
                     const row = adultMatrix[sz] || {}
                     const rowSubtotal = activeModels.reduce((sum, m) => sum + Number(row[m] || 0), 0)
                     const isSuper = SUPER_JUMBO_SIZES.includes(sz)
@@ -1137,7 +1200,7 @@ export default function NewOrderPage() {
                 onClick={() => setShowSuperJumbo(!showSuperJumbo)}
                 className="w-full mt-1.5 py-1 px-2 border border-dashed border-zinc-300 hover:border-zinc-500 rounded text-[10px] font-bold text-zinc-600 hover:text-zinc-900 bg-zinc-50 hover:bg-zinc-100 transition-colors flex items-center justify-center gap-1 cursor-pointer"
               >
-                <span>{showSuperJumbo ? "▲ Sembunyikan Super Jumbo (4XL - 7XL)" : "+ Buka Ukuran Super Jumbo (4XL - 7XL)"}</span>
+                <span>{showSuperJumbo ? "▲ Sembunyikan Ekstra Jumbo (4XL - 10XL)" : "+ Buka Ukuran Ekstra Jumbo (4XL s/d 10XL)"}</span>
               </button>
             </div>
           </div>
