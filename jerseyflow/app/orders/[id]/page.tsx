@@ -424,32 +424,23 @@ export default function OrderDetailPage() {
   // Kalkulasi Matriks Ukuran Multi-Model
   const matrixTotals = useMemo(() => {
     const modelTotals: Record<string, number> = {}
-    const adultModelTotals: Record<string, number> = {}
-    const kidModelTotals: Record<string, number> = {}
-
-    activeModels.forEach((m) => {
-      modelTotals[m] = 0
-      adultModelTotals[m] = 0
-      kidModelTotals[m] = 0
-    })
+    activeModels.forEach((m) => { modelTotals[m] = 0 })
 
     let adultTotalPcs = 0
     ALL_ADULT_SIZES.forEach((sz) => {
       const row = adultMatrix[sz] || {}
       activeModels.forEach((m) => {
         const count = Number(row[m] || 0)
-        adultModelTotals[m] = (adultModelTotals[m] || 0) + count
         modelTotals[m] = (modelTotals[m] || 0) + count
         adultTotalPcs += count
       })
     })
 
     let kidTotalPcs = 0
-    ALL_KID_SIZES.forEach((sz) => {
+    KID_SIZES.forEach((sz) => {
       const row = kidMatrix[sz] || {}
       activeModels.forEach((m) => {
         const count = Number(row[m] || 0)
-        kidModelTotals[m] = (kidModelTotals[m] || 0) + count
         modelTotals[m] = (modelTotals[m] || 0) + count
         kidTotalPcs += count
       })
@@ -459,8 +450,6 @@ export default function OrderDetailPage() {
 
     return {
       modelTotals,
-      adultModelTotals,
-      kidModelTotals,
       adultTotalPcs,
       kidTotalPcs,
       grandTotalPcs,
@@ -846,19 +835,6 @@ export default function OrderDetailPage() {
   if (loading) {
     return <div className="p-8 text-center text-xs font-mono">Memuat detail pesanan...</div>
   }
-  // Perhitungan Ukuran Aktif & Baris Penyeimbang Dinamis (Agar Subtotal Selalu Sejajar)
-  const displayedKidSizes = useMemo(() => [
-    ...(showKidToddler ? KID_TODDLER_SIZES : []),
-    ...(showKidJunior ? KID_JUNIOR_SIZES : []),
-  ], [showKidToddler, showKidJunior])
-
-  const displayedAdultSizes = useMemo(() => (
-    showSuperJumbo ? ALL_ADULT_SIZES : ADULT_REGULAR_SIZES
-  ), [showSuperJumbo])
-
-  const maxTableRows = Math.max(displayedKidSizes.length, displayedAdultSizes.length)
-  const kidSpacerCount = Math.max(0, maxTableRows - displayedKidSizes.length)
-  const adultSpacerCount = Math.max(0, maxTableRows - displayedAdultSizes.length)
 
   return (
     <div className="max-w-5xl mx-auto space-y-4 pb-12">
@@ -1753,215 +1729,153 @@ export default function OrderDetailPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* 1. Size Anak (Header Seragam & Ketinggian Baris Terkunci Presisi) */}
-            <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/40 space-y-2 overflow-x-auto flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between border-b border-zinc-200 pb-1.5 min-h-[32px] gap-2">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-xs font-bold text-zinc-800 uppercase flex items-center gap-1 shrink-0">
-                      🧒 Size Anak
-                    </span>
+            {/* 1. Size Anak (Dengan Sakelar Filter Balita / Junior) */}
+            <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/40 space-y-2 overflow-x-auto">
+              <div className="flex items-center justify-between border-b border-zinc-200 pb-1 gap-2">
+                <span className="text-xs font-bold text-zinc-800 uppercase flex items-center gap-1 shrink-0">
+                  🧒 Size Anak
+                </span>
 
-                    {/* Sakelar Filter Mini di Sisi Kiri */}
-                    <div className="flex items-center gap-1 text-[9.5px]">
-                      <button
-                        type="button"
-                        onClick={() => { if (showKidJunior && !showKidToddler) { setShowKidToddler(true); } else { setShowKidJunior(!showKidJunior); } }}
-                        className={`px-1.5 py-0.5 rounded border font-semibold cursor-pointer transition-colors ${
-                          showKidJunior ? "bg-zinc-900 text-white border-zinc-900 shadow-2xs" : "bg-white text-zinc-600 border-zinc-300 hover:bg-zinc-100"
-                        }`}
-                      >
-                        Junior (S-XXL)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { if (showKidToddler && !showKidJunior) { setShowKidJunior(true); } else { setShowKidToddler(!showKidToddler); } }}
-                        className={`px-1.5 py-0.5 rounded border font-semibold cursor-pointer transition-colors ${
-                          showKidToddler ? "bg-blue-700 text-white border-blue-700 shadow-2xs" : "bg-white text-blue-800 border-blue-200 hover:bg-blue-50"
-                        }`}
-                      >
-                        + Balita (2-5 Thn)
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Total Anak di Sisi Kanan (Seragam dengan Total Dewasa) */}
-                  <span className="font-mono text-[11px] font-bold text-zinc-700 shrink-0">
-                    Total Anak: {matrixTotals.kidTotalPcs} pcs
-                  </span>
+                {/* Sakelar Filter Mini */}
+                <div className="flex items-center gap-1 text-[9.5px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (showKidJunior && !showKidToddler) setShowKidToddler(true)
+                      else setShowKidJunior(!showKidJunior)
+                    }}
+                    className={`px-1.5 py-0.5 rounded border font-semibold cursor-pointer transition-colors ${
+                      showKidJunior ? "bg-zinc-900 text-white border-zinc-900 shadow-2xs" : "bg-white text-zinc-600 border-zinc-300 hover:bg-zinc-100"
+                    }`}
+                  >
+                    Junior (S-XXL)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (showKidToddler && !showKidJunior) setShowKidJunior(true)
+                      else setShowKidToddler(!showKidToddler)
+                    }}
+                    className={`px-1.5 py-0.5 rounded border font-semibold cursor-pointer transition-colors ${
+                      showKidToddler ? "bg-blue-700 text-white border-blue-700 shadow-2xs" : "bg-white text-blue-800 border-blue-200 hover:bg-blue-50"
+                    }`}
+                  >
+                    + Balita (2-5 Thn)
+                  </button>
                 </div>
+              </div>
 
-                <table className="w-full text-left text-xs min-w-full border-collapse">
-                  <thead>
-                    <tr className="text-zinc-600 font-semibold uppercase text-[10px] border-b border-zinc-200 h-[30px]">
-                      <th className="py-1 px-1.5 w-16 align-middle">Ukuran</th>
-                      {activeModels.map((m) => (
-                        <th key={m} className="py-1 px-1 text-center font-bold text-zinc-800 truncate max-w-[85px] align-middle" title={m}>
-                          {m}
-                        </th>
-                      ))}
-                      <th className="py-1 px-1.5 text-right w-14 align-middle">Subtotal</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-200">
-                    {displayedKidSizes.map((sz) => {
-                      const row = kidMatrix[sz] || {}
-                      const rowSubtotal = activeModels.reduce((sum, m) => sum + Number(row[m] || 0), 0)
-                      const isToddler = KID_TODDLER_SIZES.includes(sz)
+              <table className="w-full text-left text-xs min-w-full">
+                <thead>
+                  <tr className="text-zinc-600 font-semibold uppercase text-[10px] border-b border-zinc-200">
+                    <th className="py-1 px-1.5 w-16">Ukuran</th>
+                    {activeModels.map((m) => (
+                      <th key={m} className="py-1 px-1 text-center font-bold text-zinc-800 truncate max-w-[85px]" title={m}>
+                        {m}
+                      </th>
+                    ))}
+                    <th className="py-1 px-1.5 text-right w-14">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-200">
+                  {[...(showKidToddler ? KID_TODDLER_SIZES : []), ...(showKidJunior ? KID_JUNIOR_SIZES : [])].map((sz) => {
+                    const row = kidMatrix[sz] || {}
+                    const rowSubtotal = activeModels.reduce((sum, m) => sum + Number(row[m] || 0), 0)
+                    const isToddler = KID_TODDLER_SIZES.includes(sz)
 
-                      return (
-                        <tr key={sz} className={`h-[34px] hover:bg-zinc-100/60 ${isToddler ? "bg-blue-50/40" : ""}`}>
-                          <td className="py-1 px-1.5 font-bold font-mono text-zinc-800 text-[11px] align-middle">
-                            <span className={isToddler ? "text-blue-900 font-black" : ""}>{sz}</span>
-                          </td>
-                          {activeModels.map((m) => (
-                            <td key={m} className="py-1 px-1 text-center align-middle">
-                              <input
-                                type="number"
-                                min="0"
-                                disabled={isLocked || isDesignerRole}
-                                value={row[m] || ""}
-                                onChange={(e) => handleMatrixChange("kid", sz, m, Number(e.target.value) || 0)}
-                                className={`w-12 h-6 text-center py-0.5 border rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900 bg-white disabled:bg-zinc-100 ${
-                                  isToddler ? "border-blue-300 font-bold" : "border-zinc-300"
-                                }`}
-                                placeholder="0"
-                              />
-                            </td>
-                          ))}
-                          <td className="py-1 px-1.5 text-right font-mono font-bold text-zinc-900 align-middle">
-                            {rowSubtotal}
-                          </td>
-                        </tr>
-                      )
-                    })}
-
-                    {/* Baris Penyeimbang Otomatis dengan Elemen Penjaga Tinggi 34px Persis */}
-                    {Array.from({ length: kidSpacerCount }).map((_, idx) => (
-                      <tr key={`kid-spacer-${idx}`} className="h-[34px] border-b border-zinc-100 font-mono">
-                        <td className="py-1 px-1.5 font-bold font-mono text-transparent select-none align-middle">-</td>
+                    return (
+                      <tr key={sz} className={`hover:bg-zinc-100/60 ${isToddler ? "bg-blue-50/40" : ""}`}>
+                        <td className="py-1 px-1.5 font-bold font-mono text-zinc-800 text-[11px]">
+                          <span className={isToddler ? "text-blue-900 font-black" : ""}>{sz}</span>
+                        </td>
                         {activeModels.map((m) => (
-                          <td key={m} className="py-1 px-1 text-center align-middle">
-                            <div className="w-12 h-6 mx-auto select-none opacity-0">-</div>
+                          <td key={m} className="py-1 px-1 text-center">
+                            <input
+                              type="number"
+                              min="0"
+                              disabled={isLocked || isDesignerRole}
+                              value={row[m] || ""}
+                              onChange={(e) => handleMatrixChange("kid", sz, m, Number(e.target.value) || 0)}
+                              className={`w-12 text-center py-0.5 border rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900 bg-white disabled:bg-zinc-100 ${
+                                isToddler ? "border-blue-300 font-bold" : "border-zinc-300"
+                              }`}
+                              placeholder="0"
+                            />
                           </td>
                         ))}
-                        <td className="py-1 px-1.5 text-right text-transparent select-none align-middle">-</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-zinc-100 border-t-2 border-zinc-300 font-mono text-xs h-[32px]">
-                      <td className="py-1 px-1.5 font-bold font-sans text-zinc-700 text-[10px] w-16 align-middle">SUBTOTAL</td>
-                      {activeModels.map((m) => (
-                        <td key={m} className="py-1 px-1 text-center font-bold text-zinc-900 text-[11px] align-middle">
-                          {matrixTotals.kidModelTotals?.[m] || 0}
+                        <td className="py-1 px-1.5 text-right font-mono font-bold text-zinc-900">
+                          {rowSubtotal}
                         </td>
-                      ))}
-                      <td className="py-1 px-1.5 text-right font-black text-zinc-900 text-[11px] w-14 align-middle">
-                        {matrixTotals.kidTotalPcs}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              {/* Elemen Penyeimbang Tinggi Bawah Setinggi Tombol Dewasa (26px) */}
-              <div className="w-full mt-1.5 py-1 px-2 text-[10px] text-zinc-400 font-mono text-center flex items-center justify-center h-[26px]">
-                {showKidToddler ? "* Mode Balita & Junior Aktif" : "* Klik + Balita jika ada ukuran 2-5 tahun"}
-              </div>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
 
-            {/* 2. Size Dewasa (Sejajar Sempurna 100% Horizontal dengan Size Anak) */}
-            <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/40 space-y-2 overflow-x-auto flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between border-b border-zinc-200 pb-1.5 min-h-[32px]">
-                  <span className="text-xs font-bold text-zinc-800 uppercase flex items-center gap-1">
-                    👕 Size Dewasa
-                  </span>
-                  <span className="font-mono text-[11px] font-bold text-zinc-700">
-                    Total Dewasa: {matrixTotals.adultTotalPcs} pcs
-                  </span>
-                </div>
-
-                <table className="w-full text-left text-xs min-w-full border-collapse">
-                  <thead>
-                    <tr className="text-zinc-600 font-semibold uppercase text-[10px] border-b border-zinc-200 h-[30px]">
-                      <th className="py-1 px-1.5 w-16 align-middle">Ukuran</th>
-                      {activeModels.map((m) => (
-                        <th key={m} className="py-1 px-1 text-center font-bold text-zinc-800 truncate max-w-[85px] align-middle" title={m}>
-                          {m}
-                        </th>
-                      ))}
-                      <th className="py-1 px-1.5 text-right w-14 align-middle">Subtotal</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-200">
-                    {displayedAdultSizes.map((sz) => {
-                      const row = adultMatrix[sz] || {}
-                      const rowSubtotal = activeModels.reduce((sum, m) => sum + Number(row[m] || 0), 0)
-                      const isSuper = SUPER_JUMBO_SIZES.includes(sz)
-
-                      return (
-                        <tr key={sz} className={`h-[34px] hover:bg-zinc-100/60 ${isSuper ? "bg-amber-50/50" : ""}`}>
-                          <td className="py-1 px-1.5 font-bold font-mono text-zinc-800 align-middle">
-                            <span className={isSuper ? "text-amber-950 font-black" : ""}>{sz}</span>
-                          </td>
-                          {activeModels.map((m) => (
-                            <td key={m} className="py-1 px-1 text-center align-middle">
-                              <input
-                                type="number"
-                                min="0"
-                                disabled={isLocked || isDesignerRole}
-                                value={row[m] || ""}
-                                onChange={(e) => handleMatrixChange("adult", sz, m, Number(e.target.value) || 0)}
-                                className={`w-12 h-6 text-center py-0.5 border rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900 bg-white disabled:bg-zinc-100 ${
-                                  isSuper ? "border-amber-300 font-bold" : "border-zinc-300"
-                                }`}
-                                placeholder="0"
-                              />
-                            </td>
-                          ))}
-                          <td className="py-1 px-1.5 text-right font-mono font-bold text-zinc-900 align-middle">
-                            {rowSubtotal}
-                          </td>
-                        </tr>
-                      )
-                    })}
-
-                    {/* Baris Penyeimbang Otomatis Dewasa dengan Elemen Penjaga Tinggi 34px Persis */}
-                    {Array.from({ length: adultSpacerCount }).map((_, idx) => (
-                      <tr key={`adult-spacer-${idx}`} className="h-[34px] border-b border-zinc-100 font-mono">
-                        <td className="py-1 px-1.5 font-bold font-mono text-transparent select-none align-middle">-</td>
-                        {activeModels.map((m) => (
-                          <td key={m} className="py-1 px-1 text-center align-middle">
-                            <div className="w-12 h-6 mx-auto select-none opacity-0">-</div>
-                          </td>
-                        ))}
-                        <td className="py-1 px-1.5 text-right text-transparent select-none align-middle">-</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-zinc-100 border-t-2 border-zinc-300 font-mono text-xs h-[32px]">
-                      <td className="py-1 px-1.5 font-bold font-sans text-zinc-700 text-[10px] w-16 align-middle">SUBTOTAL</td>
-                      {activeModels.map((m) => (
-                        <td key={m} className="py-1 px-1 text-center font-bold text-zinc-900 text-[11px] align-middle">
-                          {matrixTotals.adultModelTotals?.[m] || 0}
-                        </td>
-                      ))}
-                      <td className="py-1 px-1.5 text-right font-black text-zinc-900 text-[11px] w-14 align-middle">
-                        {matrixTotals.adultTotalPcs}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
+            {/* 2. Size Dewasa */}
+            <div className="border border-zinc-200 rounded p-2.5 bg-zinc-50/40 space-y-2 overflow-x-auto">
+              <div className="flex items-center justify-between border-b border-zinc-200 pb-1">
+                <span className="text-xs font-bold text-zinc-800 uppercase flex items-center gap-1">
+                  👕 Size Dewasa
+                </span>
+                <span className="font-mono text-[11px] font-bold text-zinc-700">
+                  Total Dewasa: {matrixTotals.adultTotalPcs} pcs
+                </span>
               </div>
 
-              {/* Tombol Buka/Tutup Ekstra Jumbo (4XL - 10XL) Tinggi 26px */}
+              <table className="w-full text-left text-xs min-w-full">
+                <thead>
+                  <tr className="text-zinc-600 font-semibold uppercase text-[10px] border-b border-zinc-200">
+                    <th className="py-1 px-1.5 w-14">Ukuran</th>
+                    {activeModels.map((m) => (
+                      <th key={m} className="py-1 px-1 text-center font-bold text-zinc-800 truncate max-w-[85px]" title={m}>
+                        {m}
+                      </th>
+                    ))}
+                    <th className="py-1 px-1.5 text-right w-14">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-200">
+                  {(showSuperJumbo ? ALL_ADULT_SIZES : ADULT_REGULAR_SIZES).map((sz) => {
+                    const row = adultMatrix[sz] || {}
+                    const rowSubtotal = activeModels.reduce((sum, m) => sum + Number(row[m] || 0), 0)
+                    const isSuper = SUPER_JUMBO_SIZES.includes(sz)
+
+                    return (
+                      <tr key={sz} className={`hover:bg-zinc-100/60 ${isSuper ? "bg-amber-50/50" : ""}`}>
+                        <td className="py-1 px-1.5 font-bold font-mono text-zinc-800">
+                          <span className={isSuper ? "text-amber-950 font-black" : ""}>{sz}</span>
+                        </td>
+                        {activeModels.map((m) => (
+                          <td key={m} className="py-1 px-1 text-center">
+                            <input
+                              type="number"
+                              min="0"
+                              disabled={isLocked || isDesignerRole}
+                              value={row[m] || ""}
+                              onChange={(e) => handleMatrixChange("adult", sz, m, Number(e.target.value) || 0)}
+                              className={`w-12 text-center py-0.5 border rounded font-mono text-xs focus:ring-1 focus:ring-zinc-900 bg-white disabled:bg-zinc-100 ${
+                                isSuper ? "border-amber-300 font-bold" : "border-zinc-300"
+                              }`}
+                              placeholder="0"
+                            />
+                          </td>
+                        ))}
+                        <td className="py-1 px-1.5 text-right font-mono font-bold text-zinc-900">
+                          {rowSubtotal}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+
+              {/* Tombol Sakelar On-Demand Super Jumbo */}
               <button
                 type="button"
                 onClick={() => setShowSuperJumbo(!showSuperJumbo)}
-                className="w-full mt-1.5 py-1 px-2 border border-dashed border-zinc-300 hover:border-zinc-500 rounded text-[10px] font-bold text-zinc-600 hover:text-zinc-900 bg-zinc-50 hover:bg-zinc-100 transition-colors flex items-center justify-center gap-1 cursor-pointer h-[26px]"
+                className="w-full mt-1.5 py-1 px-2 border border-dashed border-zinc-300 hover:border-zinc-500 rounded text-[10px] font-bold text-zinc-600 hover:text-zinc-900 bg-zinc-50 hover:bg-zinc-100 transition-colors flex items-center justify-center gap-1 cursor-pointer"
               >
                 <span>{showSuperJumbo ? "▲ Sembunyikan Ekstra Jumbo (4XL - 10XL)" : "+ Buka Ukuran Ekstra Jumbo (4XL s/d 10XL)"}</span>
               </button>
