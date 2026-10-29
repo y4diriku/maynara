@@ -19,9 +19,10 @@ const ROLE_LABELS: { [key: string]: string } = {
   ADMIN: "Admin Workshop",
   OPERATOR_DESIGN: "Operator Desain & Setting",
   DESIGNER: "Operator Desain & Setting",
-  OPERATOR_PRINT: "Operator Print",
-  OPERATOR_PRESS: "Operator Press",
-  OPERATOR_CUTTING: "Operator Cutting",
+  OPERATOR_PRINT: "Operator Print Sublim",
+  OPERATOR_PRESS: "Operator Press Sublim",
+  OPERATOR_CUTTING: "Operator Potong Kain",
+  OPERATOR_PATTERN_CUTTING: "Operator Potong Pola",
   OPERATOR_SEWING: "Operator Jahit",
   SEWING_SUPERVISOR: "Supervisor Jahit",
   QC: "Quality Control",
@@ -235,25 +236,22 @@ export default function UserManagementPage() {
                 className="w-full border border-zinc-300 rounded px-3 py-2 text-xs focus:ring-1 focus:ring-zinc-900 focus:outline-none bg-white font-medium text-zinc-800"
               >
                 <optgroup label="Manajemen & Kantor">
-                  <option value="OWNER">Owner</option>
+                  <option value="OWNER">Owner / Pimpinan</option>
                   <option value="ACCOUNTING">Admin Keuangan / Accounting</option>
                   <option value="ADMIN">Admin Workshop</option>
                 </optgroup>
-                <optgroup label="Pos 1: Desain & Setting">
-                  <option value="OPERATOR_DESIGN">Operator Desain & Setting (Desainer)</option>
+                <optgroup label="Pra-Produksi & Cetak">
+                  <option value="OPERATOR_DESIGN">Operator Desain & Setting</option>
+                  <option value="OPERATOR_PRINT">Operator Print Sublim</option>
                 </optgroup>
-                <optgroup label="Pos 2: Cetak & Sublimasi">
-                  <option value="OPERATOR_PRINT">Operator Print</option>
-                  <option value="OPERATOR_PRESS">Operator Press</option>
+                <optgroup label="Cutting & Press">
+                  <option value="OPERATOR_CUTTING">Operator Potong Kain</option>
+                  <option value="OPERATOR_PRESS">Operator Press Sublim</option>
+                  <option value="OPERATOR_PATTERN_CUTTING">Operator Potong Pola</option>
                 </optgroup>
-                <optgroup label="Pos 3: Potong Kain">
-                  <option value="OPERATOR_CUTTING">Operator Cutting</option>
-                </optgroup>
-                <optgroup label="Pos 4: Lini Jahit">
+                <optgroup label="Lini Jahit & Finishing">
                   <option value="OPERATOR_SEWING">Operator Jahit</option>
                   <option value="SEWING_SUPERVISOR">Supervisor Jahit</option>
-                </optgroup>
-                <optgroup label="Pos 5: QC & Finishing">
                   <option value="QC">Quality Control</option>
                   <option value="OPERATOR_PACKING">Operator Finishing & Packing</option>
                 </optgroup>

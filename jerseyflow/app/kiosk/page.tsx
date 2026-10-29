@@ -111,7 +111,7 @@ const STAGES_CONFIG: {
     code: "05",
     next: "SEWING",
     nextLabel: "06. Lini Jahit",
-    allowedRoles: ["OWNER", "ADMIN", "OPERATOR_CUTTING"],
+    allowedRoles: ["OWNER", "ADMIN", "OPERATOR_PATTERN_CUTTING", "OPERATOR_CUTTING"],
     logMessage: (isMakloon, vendor) => isMakloon
       ? `Potongan pola baju presisi selesai dipotong. Kain & SPK diserahkan ke Mitra Makloon (${vendor || "Vendor Luar"}).`
       : "Potongan pola jersey (badan, lengan, kerah) selesai dipotong presisi dan diserahkan ke Pos 06 (Lini Jahit)."
