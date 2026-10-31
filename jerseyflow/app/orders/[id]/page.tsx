@@ -777,7 +777,8 @@ export default function OrderDetailPage() {
           catatan_desain: catatanDesain.trim(),
           link_drive_aset: linkDriveAset.trim(),
           is_makloon: isMakloon,
-          makloon_vendor_name: isMakloon ? makloonVendorName.trim() : null
+          makloon_vendor_name: isMakloon ? makloonVendorName.trim() : null,
+          makloon_partner_id: isMakloon ? (partnerList.find(p => p.name.trim().toLowerCase() === makloonVendorName.trim().toLowerCase())?.id || null) : null
         })
         .eq("id", orderId)
 

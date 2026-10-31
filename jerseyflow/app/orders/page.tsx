@@ -122,7 +122,7 @@ export default function OrdersListPage() {
   const [customerPhoneInput, setCustomerPhoneInput] = useState("")
   
   // TABS & FILTERS
-  const [activeTab, setActiveTab] = useState<FilterTab>("COMPLETED")
+  const [activeTab, setActiveTab] = useState<FilterTab>("WIP")
   const [period, setPeriod] = useState<PeriodType>("THIS_MONTH")
   const [customMonth, setCustomMonth] = useState<string>(() => {
     const now = new Date()
@@ -233,17 +233,19 @@ export default function OrdersListPage() {
       const sisaTagihan = Number(o.total_price || 0) - Number(o.down_payment || 0)
 
       // Tab Filter + Date Constraint
-      if (activeTab === "COMPLETED") {
+      if (activeTab === "WIP") {
+        // Tab WIP: Seluruh pesanan aktif sedang produksi tampil 100% tanpa terhalang filter bulan
+        if (o.current_status === "COMPLETED" || o.current_status === "CANCELLED") return false
+      } else if (activeTab === "COMPLETED") {
+        // Tab Selesai: Mengacu pada tanggal selesai (updated_at) sesuai periode bulan terpilih
         if (o.current_status !== "COMPLETED") return false
         if (!isDateInPeriod(o.updated_at, period, customMonth)) return false
-      } else if (activeTab === "WIP") {
-        if (o.current_status === "COMPLETED" || o.current_status === "CANCELLED") return false
-        if (period !== "ALL_TIME" && !isDateInPeriod(o.created_at, period, customMonth)) return false
       } else if (activeTab === "UNPAID") {
-        // Tab Belum Lunas difokuskan pada order aktif
+        // Tab Belum Lunas: Seluruh piutang berjalan aktif tanpa terhalang bulan
         if (o.current_status === "COMPLETED" || o.current_status === "CANCELLED" || sisaTagihan <= 0 || o.is_paid_off) return false
       } else {
-        if (!isDateInPeriod(o.created_at, period, customMonth)) return false
+        // Tab Semua Data: Disaring sesuai periode
+        if (period !== "ALL_TIME" && !isDateInPeriod(o.created_at, period, customMonth)) return false
       }
 
       // Search Query (No Order, Nama Order, Nama Pemesan)
@@ -301,14 +303,11 @@ export default function OrdersListPage() {
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-12">
-      {/* 1. Header */}
+      {/* 1. Header & Sakelar Periode Waktu Global */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200 pb-3">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-base font-bold text-zinc-900 leading-tight">Daftar Pesanan & Arsip Produksi</h1>
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-900 text-white shadow-2xs">
-              Periode: {getPeriodLabel(period, customMonth)}
-            </span>
             {isRoleChecked && (
               <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
                 canViewFinancials ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-zinc-100 text-zinc-600 border-zinc-200"
@@ -317,14 +316,46 @@ export default function OrdersListPage() {
               </span>
             )}
           </div>
-          <p className="text-xs text-zinc-600">Buku besar rekapitulasi data pesanan, pencarian riwayat, dan pemantauan kinerja.</p>
+          <p className="text-xs text-zinc-600">Buku besar rekapitulasi data pesanan, pencarian riwayat, dan pemantauan kinerja workshop.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => loadOrders(true)} className="p-2 border border-zinc-200 rounded text-zinc-600 hover:bg-zinc-50 shadow-2xs">
+
+        {/* Dropdown Periode Kalender Mengontrol 4 Kartu KPI di Bawahnya */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 bg-white border border-zinc-300 rounded px-2.5 py-1 text-xs shadow-2xs">
+            <Calendar className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
+            <select
+              value={period}
+              onChange={(e) => setPeriod(e.target.value as PeriodType)}
+              className="bg-transparent font-bold text-zinc-900 focus:outline-none cursor-pointer"
+            >
+              <option value="THIS_MONTH">Bulan Ini</option>
+              <option value="LAST_MONTH">Bulan Lalu</option>
+              <option value="CUSTOM">Pilih Bulan...</option>
+              <option value="ALL_TIME">Semua Waktu</option>
+            </select>
+            {period === "CUSTOM" && (
+              <input
+                type="month"
+                value={customMonth}
+                onChange={(e) => setCustomMonth(e.target.value)}
+                className="text-xs border-l border-zinc-300 pl-2 ml-1 text-zinc-800 focus:outline-none font-mono bg-transparent"
+              />
+            )}
+          </div>
+
+          <button
+            onClick={() => loadOrders(true)}
+            className="p-1.5 border border-zinc-200 rounded text-zinc-600 hover:bg-zinc-50 shadow-2xs cursor-pointer"
+            title="Refresh Data"
+          >
             <RefreshCw className={isRefreshing ? "h-3.5 w-3.5 animate-spin text-zinc-900" : "h-3.5 w-3.5"} />
           </button>
-          <Link href="/" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded text-xs font-semibold transition-colors shadow-2xs">
-            <ArrowLeft className="h-3.5 w-3.5" /><span>Papan Kanban</span>
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded text-xs font-semibold transition-colors shadow-2xs"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <span>Papan Kanban</span>
           </Link>
         </div>
       </div>
@@ -436,19 +467,19 @@ export default function OrdersListPage() {
 
       {/* 3. BAR NAVIGASI & FILTER RAPI (2 BARIS TERPISAH) */}
       <div className="flex flex-col gap-2.5 bg-white p-3 border border-zinc-200 rounded shadow-2xs">
-        {/* Baris Atas: Tabs (Horizontal Scrollable on Mobile) */}
+        {/* Baris Atas: Tabs Navigasi - Sedang Produksi (WIP) Urutan Pertama */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
-          <button onClick={() => setActiveTab("COMPLETED")} className={`shrink-0 px-3 py-1.5 rounded text-xs font-semibold transition-colors flex items-center gap-1.5 ${activeTab === "COMPLETED" ? "bg-zinc-900 text-white shadow-2xs" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"}`}>
-            Selesai & Arsip <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${activeTab === "COMPLETED" ? "bg-zinc-700" : "bg-zinc-300 text-zinc-800"}`}>{stats.countCompleted}</span>
+          <button onClick={() => setActiveTab("WIP")} className={`shrink-0 px-3 py-1.5 rounded text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${activeTab === "WIP" ? "bg-zinc-900 text-white shadow-2xs font-bold" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"}`}>
+            Sedang Produksi (WIP) <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${activeTab === "WIP" ? "bg-zinc-700 text-white" : "bg-zinc-300 text-zinc-800"}`}>{stats.countWip}</span>
           </button>
-          <button onClick={() => setActiveTab("WIP")} className={`shrink-0 px-3 py-1.5 rounded text-xs font-semibold transition-colors flex items-center gap-1.5 ${activeTab === "WIP" ? "bg-amber-500 text-white shadow-2xs" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"}`}>
-            Sedang Produksi (WIP) <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${activeTab === "WIP" ? "bg-amber-600" : "bg-zinc-300 text-zinc-800"}`}>{stats.countWip}</span>
+          <button onClick={() => setActiveTab("COMPLETED")} className={`shrink-0 px-3 py-1.5 rounded text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${activeTab === "COMPLETED" ? "bg-zinc-900 text-white shadow-2xs font-bold" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"}`}>
+            Selesai & Arsip <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${activeTab === "COMPLETED" ? "bg-zinc-700 text-white" : "bg-zinc-300 text-zinc-800"}`}>{stats.countCompleted}</span>
           </button>
-          <button onClick={() => setActiveTab("UNPAID")} className={`shrink-0 px-3 py-1.5 rounded text-xs font-semibold transition-colors flex items-center gap-1.5 ${activeTab === "UNPAID" ? "bg-red-600 text-white shadow-2xs" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"}`}>
-            Belum Lunas <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${activeTab === "UNPAID" ? "bg-red-700" : "bg-zinc-300 text-zinc-800"}`}>{stats.countUnpaid}</span>
+          <button onClick={() => setActiveTab("UNPAID")} className={`shrink-0 px-3 py-1.5 rounded text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${activeTab === "UNPAID" ? "bg-red-600 text-white shadow-2xs font-bold" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"}`}>
+            Belum Lunas <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${activeTab === "UNPAID" ? "bg-red-700 text-white" : "bg-zinc-300 text-zinc-800"}`}>{stats.countUnpaid}</span>
           </button>
-          <button onClick={() => setActiveTab("ALL")} className={`shrink-0 px-3 py-1.5 rounded text-xs font-semibold transition-colors flex items-center gap-1.5 ${activeTab === "ALL" ? "bg-blue-600 text-white shadow-2xs" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"}`}>
-            Semua Data <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${activeTab === "ALL" ? "bg-blue-700" : "bg-zinc-300 text-zinc-800"}`}>{stats.totalInDb}</span>
+          <button onClick={() => setActiveTab("ALL")} className={`shrink-0 px-3 py-1.5 rounded text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${activeTab === "ALL" ? "bg-blue-600 text-white shadow-2xs font-bold" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"}`}>
+            Semua Data <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${activeTab === "ALL" ? "bg-blue-700 text-white" : "bg-zinc-300 text-zinc-800"}`}>{stats.totalInDb}</span>
           </button>
         </div>
 
@@ -474,19 +505,14 @@ export default function OrdersListPage() {
                 <option value="NORMAL">🟢 Reguler Saja</option>
               </select>
             </div>
-            
-            <div className="flex items-center gap-1.5 bg-zinc-50 border border-zinc-200 rounded px-2.5 py-1 text-xs">
-              <Calendar className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
-              <select value={period} onChange={(e) => setPeriod(e.target.value as PeriodType)} className="bg-transparent font-medium text-zinc-800 focus:outline-none cursor-pointer">
-                <option value="THIS_MONTH">Bulan Ini</option>
-                <option value="LAST_MONTH">Bulan Lalu</option>
-                <option value="CUSTOM">Pilih Bulan...</option>
-                <option value="ALL_TIME">Semua Waktu</option>
-              </select>
-              {period === "CUSTOM" && (
-                <input type="month" value={customMonth} onChange={(e) => setCustomMonth(e.target.value)} className="text-xs border-l border-zinc-300 pl-2 ml-1 text-zinc-800 focus:outline-none font-mono bg-transparent" />
-              )}
-            </div>
+
+            {/* Lencana Kontekstual Saat Berada di Tab Arsip Selesai */}
+            {activeTab === "COMPLETED" && (
+              <span className="px-2 py-0.5 rounded bg-zinc-100 text-zinc-700 text-[10.5px] font-mono border border-zinc-200 inline-flex items-center gap-1 shadow-2xs">
+                <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                <span>Arsip Periode: <strong>{getPeriodLabel(period, customMonth)}</strong></span>
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2 border border-zinc-300 bg-white px-2.5 py-1.5 rounded shadow-inner w-full lg:w-72 shrink-0">

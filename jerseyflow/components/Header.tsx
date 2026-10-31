@@ -77,7 +77,7 @@ export function Header() {
     ] : []),
     { name: "Scan SPK Produksi", href: "/kiosk", icon: QrCode },
     ...(!isOperator ? [
-      { name: "Partner Makloon", href: "/makloon", icon: Users2 },
+      { name: "Distribusi Jahit", href: "/makloon", icon: Users2 },
     ] : []),
     ...(userRole === "OWNER" ? [
       { name: "Laporan & Evaluasi", href: "/analytics", icon: TrendingUp },
@@ -89,7 +89,7 @@ export function Header() {
     if (pathname === "/") return "Pipeline Antrean Produksi"
     if (pathname.startsWith("/orders")) return "Daftar & Detail Pesanan"
     if (pathname === "/kiosk") return "Scan SPK Produksi"
-    if (pathname === "/makloon") return "Partner Makloon Luar"
+    if (pathname === "/makloon") return "Distribusi Jahit Luar"
     if (pathname === "/analytics") return "Laporan & Evaluasi"
     if (pathname.startsWith("/settings")) return "Pengaturan Sistem"
     return "Dashboard"

@@ -155,7 +155,7 @@ export default function Sidebar() {
       { name: "Scan SPK Produksi", href: "/kiosk", icon: QrCode },
     ] : []),
     ...(role === "OWNER" || role === "ADMIN" ? [
-      { name: "Partner Makloon", href: "/makloon", icon: Users2 },
+      { name: "Distribusi Jahit", href: "/makloon", icon: Users2 },
     ] : []),
     ...(role === "OWNER" ? [
       { name: "Laporan & Evaluasi", href: "/analytics", icon: TrendingUp },
