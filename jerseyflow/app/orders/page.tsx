@@ -123,7 +123,7 @@ export default function OrdersListPage() {
   
   // TABS & FILTERS
   const [activeTab, setActiveTab] = useState<FilterTab>("WIP")
-  const [period, setPeriod] = useState<PeriodType>("THIS_MONTH")
+  const [period, setPeriod] = useState<PeriodType>("ALL_TIME")
   const [customMonth, setCustomMonth] = useState<string>(() => {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
@@ -200,15 +200,19 @@ export default function OrdersListPage() {
 
     const nilaiPesananWIP = wipOrders.reduce((sum, o) => sum + Number(o.total_price || 0), 0)
 
-    // Indikator Tab
-    const countCompleted = completedOrders.length
-    const countWip = wipOrders.length
+    // Indikator Lencana Tab (Tersinkronisasi 100% dengan Filter Periode & Baris Tabel)
+    // Jika Semua Waktu: tampilkan total semua. Jika filter bulan aktif: tampilkan jumlah pada bulan tersebut.
+    const countCompleted = period === "ALL_TIME" ? completedOrders.length : completedInPeriod.length
+    const countWip = wipOrders.length // Seluruh WIP aktif selalu tampil
     const countUnpaid = wipOrders.filter(o => (Number(o.total_price || 0) - Number(o.down_payment || 0)) > 0 && !o.is_paid_off).length
+    const countAllData = period === "ALL_TIME" 
+      ? orders.length 
+      : orders.filter(o => isDateInPeriod(o.created_at, period, customMonth)).length
 
     return {
       totalPesananSelesai, totalPcsSelesai, nilaiPesananSelesai, totalPiutangGlobal,
       totalUangMasukPeriode, nilaiPesananWIP,
-      countCompleted, countWip, countUnpaid, totalInDb: orders.length,
+      countCompleted, countWip, countUnpaid, totalInDb: countAllData,
       orderMasukBulanIni: wipInPeriod.length + completedInPeriod.length
     }
   }, [orders, period, customMonth])
