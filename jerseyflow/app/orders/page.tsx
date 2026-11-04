@@ -559,18 +559,18 @@ export default function OrdersListPage() {
 
                   return (
                     <tr key={o.id} className="hover:bg-zinc-50 transition-colors">
-                      {/* Kolom 1: No Order & Badge Prioritas */}
+                      {/* Kolom 1: No Order & Badge Prioritas (Hanya menyala saat WIP) */}
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-1.5">
                           <Link href={`/orders/${o.id}`} className="font-mono font-black text-zinc-900 hover:text-blue-600 hover:underline">
                             {o.order_number}
                           </Link>
-                          {o.priority === "URGENT" && (
+                          {!isCompleted && o.current_status !== "CANCELLED" && o.priority === "URGENT" && (
                             <span className="text-[8px] font-black bg-red-600 text-white px-1.5 py-0.2 rounded font-sans tracking-tight shrink-0 animate-pulse">
                               🔥 URGENT
                             </span>
                           )}
-                          {o.priority === "HIGH" && (
+                          {!isCompleted && o.current_status !== "CANCELLED" && o.priority === "HIGH" && (
                             <span className="text-[8px] font-black bg-amber-500 text-white px-1.5 py-0.2 rounded font-sans tracking-tight shrink-0">
                               ⚡ KILAT
                             </span>
